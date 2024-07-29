@@ -1,0 +1,66 @@
+{
+  "name": "zero-backpressure-weighted-promise-semaphore",
+  "version": "1.0.0",
+  "description": "A modern weighted promise semaphore, ideal for managing workloads with varying processing requirements. It allows limiting the total weight of concurrently executing jobs, ensuring efficient resource utilization. Offering backpressure control for enhanced efficiency, utilizing a communicative API that signals availability. Additionally, it incorporates mechanisms for graceful termination and error handling, making it suitable for complex scenarios.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ori88c/zero-backpressure-weighted-promise-semaphore.git"
+  },
+  "contributors": [
+    "Ori Cohen (https://github.com/ori88c/)"
+  ],
+  "homepage": "https://github.com/ori88c/zero-backpressure-weighted-promise-semaphore#readme",
+  "author": "Ori Cohen",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "test": "jest"
+  },
+  "keywords": [
+    "weighted",
+    "weight",
+    "semaphore",
+    "promise",
+    "promise-semaphore",
+    "counting-semaphore",
+    "mutex",
+    "lock",
+    "job",
+    "task",
+    "concurrency",
+    "acquire",
+    "backpressure",
+    "graceful-termination",
+    "deterministic-termination",
+    "limit",
+    "promise-limit",
+    "scheduling",
+    "executor",
+    "uncaught-error",
+    "uncaught-rejection",
+    "async",
+    "nodejs",
+    "typescript",
+    "ts",
+    "ES2020"
+  ],
+  "engines": {
+    "node": ">=14.5.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.2"
+  },
+  "types": "./dist/zero-backpressure-weighted-promise-semaphore.d.ts",
+  "main": "./dist/zero-backpressure-weighted-promise-semaphore.js",
+  "files": [
+    "src/",
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ]
+}
