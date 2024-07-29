@@ -11,7 +11,7 @@
   ],
   "homepage": "https://github.com/ori88c/zero-backpressure-weighted-promise-semaphore#readme",
   "author": "Ori Cohen",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
