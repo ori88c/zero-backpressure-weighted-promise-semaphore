@@ -73,7 +73,8 @@ async function trainModels(models: ReadonlyArray<ModelInfo>) {
     // Until the semaphore can start training the current model, it won't make sense to
     // add more jobs, as such will induce unnecessary backpressure.
     await trainingSemaphore.startExecution(
-      (): Promise<void> => handleModelTraining(model)
+      (): Promise<void> => handleModelTraining(model),
+      model.weight
     );
   }
   // Note: at this stage, jobs might be still executing, as we did not wait for
