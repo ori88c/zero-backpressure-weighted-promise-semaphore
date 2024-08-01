@@ -1,22 +1,16 @@
 <h2 align="middle">zero-backpressure-weighted-promise-semaphore</h2>
 
-The `ZeroBackpressureWeightedSemaphore` class implements a Promise Semaphore for Node.js projects, enabling users to limit the concurrency of **weighted** jobs.  
-Each job is associated with a natural-number weight (1, 2, 3, ...). The semaphore guarantees that the total weight of concurrently executing jobs never exceeds a user-defined limit. The use of natural numbers for weights is mandated to prevent floating-point precision issues inherent in JavaScript.  
-This implementation does not queue pending jobs, thereby eliminating backpressure. As a result, users have better control over memory footprint, which enhances performance by reducing garbage-collector overhead.
+The `ZeroBackpressureWeightedSemaphore` class implements a modern Promise Semaphore for Node.js projects that limits the concurrency of **weighted** jobs. It provides backpressure control for enhanced efficiency through a communicative API that signals availability. The class also includes mechanisms for **error handling** and **graceful termination**, ensuring that all currently executing jobs complete before termination.
+
+Each job is associated with a natural-number weight (1, 2, 3, ...). The semaphore guarantees that the total weight of concurrently executing jobs never exceeds a user-defined limit. The use of natural numbers for weights is mandated to prevent floating-point precision issues inherent in JavaScript.
+
+This implementation does not queue pending jobs. Instead, the API encourages a **just-in-time** approach, thereby eliminating backpressure. As a result, users have better control over memory footprint, which enhances performance by reducing garbage-collector overhead.
 
 The design addresses the two primary semaphore use cases in Node.js:
 * __Multiple Jobs Execution__: This use case involves a single caller dispatching multiple jobs, often serving as the sole owner of the semaphore instance.
 * __Single Job Execution__: In scenarios where multiple callers, such as route handlers, concurrently access the same semaphore instance. Each caller initiates a single job and relies on its outcome to proceed.
 
 Each use case necessitates distinct handling capabilities, which will be discussed separately with accompanying examples.
-
-## Modern API Design
-
-Traditional semaphore APIs require explicit *acquire* and *release* steps, adding overhead and responsibility for the user. Additionally, they introduce the risk of deadlocking the application if one forgets to *release*, for example, due to a thrown exception.
-
-In contrast, `ZeroBackpressureWeightedSemaphore` manages job execution, abstracting away these details and reducing user responsibility. The *acquire* and *release* steps are handled implicitly by the execution methods, reminiscent of the RAII idiom in C++.
-
-Method names are chosen to clearly convey their functionality.
 
 ## Key Features
 
@@ -31,6 +25,14 @@ Method names are chosen to clearly convey their functionality.
 - No external runtime dependencies: Only development dependencies are used.
 - ES2020 Compatibility: The `tsconfig` target is set to ES2020, ensuring compatibility with ES2020 environments.
 - TypeScript support.
+
+## Modern API Design
+
+Traditional semaphore APIs require explicit *acquire* and *release* steps, adding overhead and responsibility for the user. Additionally, they introduce the risk of deadlocking the application if one forgets to *release*, for example, due to a thrown exception.
+
+In contrast, `ZeroBackpressureWeightedSemaphore` manages job execution, abstracting away these details and reducing user responsibility. The *acquire* and *release* steps are handled implicitly by the execution methods, reminiscent of the RAII idiom in C++.
+
+Method names are chosen to clearly convey their functionality.
 
 ## 1st use-case: Multiple Jobs Execution
 
