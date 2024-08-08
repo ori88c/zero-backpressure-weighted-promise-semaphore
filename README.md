@@ -1,10 +1,11 @@
 <h2 align="middle">zero-backpressure-weighted-promise-semaphore</h2>
 
-The `ZeroBackpressureWeightedSemaphore` class implements a modern Promise Semaphore for Node.js projects that limits the concurrency of **weighted** jobs. It provides backpressure control for enhanced efficiency through a communicative API that signals availability. The class also includes mechanisms for **error handling** and **graceful termination**, ensuring that all currently executing jobs complete before termination.
+The `ZeroBackpressureWeightedSemaphore` class implements a modern Promise Semaphore for Node.js projects, allowing users to limit the concurrency of **weighted** jobs.
 
 Each job is associated with a natural-number weight (1, 2, 3, ...). The semaphore guarantees that the total weight of concurrently executing jobs never exceeds a user-defined limit. The use of natural numbers for weights is mandated to prevent floating-point precision issues inherent in JavaScript.
 
-This implementation does not queue pending jobs. Instead, the API encourages a **just-in-time** approach, thereby eliminating backpressure. As a result, users have better control over memory footprint, which enhances performance by reducing garbage-collector overhead.
+This implementation does not queue pending jobs. Instead, the API promotes a **just-in-time** approach via communicative API that signals availability, thereby eliminating backpressure. As a result, users have better control over memory footprint, which enhances performance by reducing garbage-collector overhead.  
+Additionally, built-in mechanisms for **error handling** and **graceful termination** are provided, ensuring that all currently executing jobs complete before termination or post-processing.
 
 The design addresses the two primary semaphore use cases in Node.js:
 * __Multiple Jobs Execution__: This use case involves a single caller dispatching multiple jobs, often serving as the sole owner of the semaphore instance.
@@ -12,13 +13,13 @@ The design addresses the two primary semaphore use cases in Node.js:
 
 Each use case necessitates distinct handling capabilities, which will be discussed separately with accompanying examples.
 
-## Key Features
+## Key Features :sparkles:
 
-- __Weighted Jobs__: Suitable for situations where jobs have **varying** processing requirements, such as in backend applications managing resource load. For instance, consider multiple machine learning models being trained on a shared GPU resource. Each model demands different amounts of GPU memory and processing power. A weighted semaphore can regulate the total GPU memory usage, ensuring that only a specific combination of models is trained concurrently, thus preventing the GPU capacity from being exceeded.
+- __Weighted Jobs :weight_lifting_woman:__: Suitable for situations where jobs have **varying** processing requirements, such as in backend applications managing resource load. For instance, consider multiple machine learning models being trained on a shared GPU resource. Each model demands different amounts of GPU memory and processing power. A weighted semaphore can regulate the total GPU memory usage, ensuring that only a specific combination of models is trained concurrently, thus preventing the GPU capacity from being exceeded.
 - __Backpressure Control__: Ideal for job workers and background services. Concurrency control alone isn't sufficient to ensure stability and performance if backpressure control is overlooked. Without backpressure control, the heap can become overloaded, resulting in space complexity of O(*semaphore-slots* + *pending-jobs*) instead of O(*semaphore-slots*).
 - __Graceful Termination__: Await the completion of all currently executing jobs via the `waitForAllExecutingJobsToComplete` method.
-- __High Efficiency__: All state-altering operations have a constant time complexity, O(1).
-- __Comprehensive documentation__: The class is thoroughly documented, enabling IDEs to provide helpful tooltips that enhance the coding experience.
+- __High Efficiency :gear:__: All state-altering operations have a constant time complexity, O(1).
+- __Comprehensive Documentation :books:__: The class is thoroughly documented, enabling IDEs to provide helpful tooltips that enhance the coding experience.
 - __Robust Error Handling__: Uncaught errors from background jobs triggered by `startExecution` are captured and can be accessed using the `extractUncaughtErrors` method.
 - __Tests__: **Fully covered** by rigorous unit tests, including stress tests with randomized weights.
 - Self-explanatory method names.
@@ -26,7 +27,7 @@ Each use case necessitates distinct handling capabilities, which will be discuss
 - ES2020 Compatibility: The `tsconfig` target is set to ES2020, ensuring compatibility with ES2020 environments.
 - TypeScript support.
 
-## Modern API Design
+## Modern API Design :rocket:
 
 Traditional semaphore APIs require explicit *acquire* and *release* steps, adding overhead and responsibility for the user. Additionally, they introduce the risk of deadlocking the application if one forgets to *release*, for example, due to a thrown exception.
 
@@ -277,7 +278,7 @@ app.get('/user/', async (req, res) => {
 });
 ```
 
-## Graceful Termination
+## Graceful Termination :hourglass:
 
 The `waitForAllExecutingJobsToComplete` method is essential for scenarios where it is necessary to wait for all ongoing jobs to finish, such as logging a success message or executing subsequent logic. Without this built-in capability, developers would have to implement periodic polling of the semaphore or other indicators to monitor progress, which can increase both implementation complexity and resource usage.
 
@@ -285,7 +286,7 @@ A key use case for this method is ensuring stable unit tests. Each test should s
 
 If your component has a termination method (`stop`, `terminate`, or similar), keep that in mind.
 
-## Error Handling for Background Jobs
+## Error Handling for Background Jobs :warning:
 
 Background jobs triggered by `startExecution` may throw errors. Unlike the `waitForCompletion` case, the caller has no reference to the corresponding job promise which executes in the background.
 
@@ -309,7 +310,7 @@ Mitigating backpressure is primarily associated with the `startExecution` method
 
 For instance, consider a situation where 1K concurrently executing route handlers are each awaiting the completion of their own `waitForCompletion` execution, while the semaphore is unavailable. In such cases, all handlers will internally wait on the semaphore's `_waitForSufficientWeight` private property, competing to acquire the semaphore once it becomes available.
 
-## Naming Convention
+## Naming Convention :memo:
 
 To improve readability and maintainability, it is highly recommended to assign a use-case-specific name to your semaphore instances. This practice helps in clearly identifying the purpose of each semaphore in the codebase. Examples include:
 - dbAccessSemaphore
@@ -318,6 +319,6 @@ To improve readability and maintainability, it is highly recommended to assign a
 - trafficAnalyzerSemaphore
 - batchProcessingSemaphore
 
-## License
+## License :scroll:
 
 [Apache 2.0](LICENSE)
