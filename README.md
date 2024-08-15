@@ -1,4 +1,4 @@
-<h2 align="middle">zero-backpressure-weighted-promise-semaphore</h2>
+<h3 align="middle">Zero Backpressure Weighted Promise Semaphore</h2>
 
 The `ZeroBackpressureWeightedSemaphore` class implements a modern Promise Semaphore for Node.js projects, allowing users to limit the concurrency of **weighted** jobs.
 
@@ -35,7 +35,7 @@ In contrast, `ZeroBackpressureWeightedSemaphore` manages job execution, abstract
 
 Method names are chosen to clearly convey their functionality.
 
-## 1st use-case: Multiple Jobs Execution
+## 1st use-case: Multiple Jobs Execution :man_technologist:
 
 This semaphore variant excels in eliminating backpressure when dispatching multiple concurrent jobs from the same caller. This pattern is typically observed in **background job services**, such as:
 - Log File analysis.
@@ -230,7 +230,7 @@ async function processConsumedMessages(): Promise<void> {
 }
 ```
 
-## 2nd use-case: Single Job Execution
+## 2nd use-case: Single Job Execution :man_technologist:
 
 The `waitForCompletion` method is useful for executing a sub-procedure, for which the caller must wait before proceeding with its work.
 

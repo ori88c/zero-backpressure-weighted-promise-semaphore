@@ -132,12 +132,12 @@ export declare class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorTy
      * `extractUncaughtError` method. Users are encouraged to specify a custom `UncaughtErrorType`
      * generic parameter to the class if jobs may throw errors.
      *
-     * @param job - The job to be executed once the semaphore is available.
+     * @param backgroundJob - The job to be executed once the semaphore is available.
      * @param weight - A natural number representing the weight associated with the job.
      * @throws - Error if the weight is not a natural number (1, 2, 3, ...).
      * @returns A promise that resolves when the job starts execution.
      */
-    startExecution(job: SemaphoreJob<T>, weight: number): Promise<void>;
+    startExecution(backgroundJob: SemaphoreJob<T>, weight: number): Promise<void>;
     /**
      * waitForCompletion
      *

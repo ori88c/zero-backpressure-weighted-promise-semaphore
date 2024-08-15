@@ -164,16 +164,16 @@ class ZeroBackpressureWeightedSemaphore {
      * `extractUncaughtError` method. Users are encouraged to specify a custom `UncaughtErrorType`
      * generic parameter to the class if jobs may throw errors.
      *
-     * @param job - The job to be executed once the semaphore is available.
+     * @param backgroundJob - The job to be executed once the semaphore is available.
      * @param weight - A natural number representing the weight associated with the job.
      * @throws - Error if the weight is not a natural number (1, 2, 3, ...).
      * @returns A promise that resolves when the job starts execution.
      */
-    async startExecution(job, weight) {
+    async startExecution(backgroundJob, weight) {
         this._validateWeight(weight, 'startExecution');
         await this._allotWeight(weight);
         const availableSlot = this._getAvailableSlot();
-        this._slots[availableSlot] = this._handleJobExecution(job, availableSlot, weight, true);
+        this._slots[availableSlot] = this._handleJobExecution(backgroundJob, availableSlot, weight, true);
         return;
     }
     /**
@@ -325,7 +325,8 @@ class ZeroBackpressureWeightedSemaphore {
                 // User is awaiting for either fulfillement or rejection.
                 throw err;
             }
-            // Triggered by `startExecution`: A background job.
+            // Triggered by `startExecution`:
+            // A background job, the caller does not await for its return value to proceed.
             this._uncaughtErrors.push(err);
         }
         finally {
