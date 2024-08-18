@@ -1,4 +1,4 @@
-<h3 align="middle">Zero Backpressure Weighted Promise Semaphore</h2>
+<h2 align="middle">Zero Backpressure Weighted Promise Semaphore</h2>
 
 The `ZeroBackpressureWeightedSemaphore` class implements a modern Promise Semaphore for Node.js projects, allowing users to limit the concurrency of **weighted** jobs.
 
