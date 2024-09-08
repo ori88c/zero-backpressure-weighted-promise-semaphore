@@ -68,13 +68,13 @@ const totalAllowedWeight = 180;
 const estimatedMaxNumberOfConcurrentJobs = 12;
 const trainingSemaphore = new ZeroBackpressureWeightedSemaphore<void>(
   totalAllowedWeight,
-  estimatedMaxNumberOfConcurrentJobs // Optional argument, may decrease the amount of dynamic slot allocations (optimization).
+  estimatedMaxNumberOfConcurrentJobs // Optional argument; can reduce dynamic slot allocations for optimization purposes.
 );
 
 async function trainModels(models: ReadonlyArray<ModelInfo>) {
   for (const model of models) {
-    // Until the semaphore can start training the current model, it won't make sense to
-    // add more jobs, as such will induce unnecessary backpressure.
+    // Until the semaphore can start training the current model, adding more
+    // jobs won't make sense as this would induce unnecessary backpressure.
     await trainingSemaphore.startExecution(
       (): Promise<void> => handleModelTraining(model),
       model.weight
@@ -118,13 +118,13 @@ const trainingSemaphore =
   // Notice the 2nd generic parameter (Error by default).
   new ZeroBackpressureWeightedSemaphore<void, CustomModelError>(
     totalAllowedWeight,
-    estimatedMaxNumberOfConcurrentJobs // Optional argument, acts as optimization.
+    estimatedMaxNumberOfConcurrentJobs // Optional argument; can reduce dynamic slot allocations for optimization purposes.
   );
 
 async function trainModels(models: ReadonlyArray<ModelInfo>) {
   for (const model of models) {
-    // Until the semaphore can start training the current model, it won't make sense to
-    // add more jobs, as such will induce unnecessary backpressure.
+    // Until the semaphore can start training the current model, adding more
+    // jobs won't make sense as this would induce unnecessary backpressure.
     await trainingSemaphore.startExecution(
       (): Promise<void> => handleModelTraining(model),
       model.weight
