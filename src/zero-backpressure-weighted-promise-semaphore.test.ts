@@ -89,8 +89,8 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
     });
 
     test(
-      'when each weighted job consumes more than half of the total allowed weight, each job must await for ' +
-      'its previous to complete, i.e. they run sequantially', async () => {
+      'when each weighted job consumes more than half of the total allowed weight, ' +
+      'each job must wait for the previous one to complete, i.e., they run sequantially', async () => {
       const numberOfJobs = 30;
       const totalAllowedWeight = 180;
       const maxConcurrentJobs = 1;
@@ -114,14 +114,14 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
         const job: SemaphoreJob<void> = () => jobPromise;
 
         const currentJobWeight = getRandomWeightAboveHalfTotal();
-        const startExecutionPromise = semaphore.startExecution(job, currentJobWeight); // Acquires the weight allotment lock, if jobNo > 1.
+        const startExecutionPromise = semaphore.startExecution(job, currentJobWeight); // Acquires the weight allotment lock, if jobNo > 1
 
-        if (jobNo === 1)
+        if (jobNo === 1) {
           await startExecutionPromise;
-        else {
-          // We expect resolveFast to win the race, as if a previously added job is currently executing,
-          // the current job won't be able to start. Due to the specific setup, on which each job requires
-          // more than half of the total weight.
+        } else {
+          // We expect resolveFast to win the race, because if a previously added job is still executing,
+          // the current job cannot start. This is due to the specific setup where each job consumes more than half
+          // of the total allowed weight.
           await Promise.race([resolveFast(), startExecutionPromise]);
         }
 
@@ -138,14 +138,14 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
         expect(semaphore.availableWeight).toBe(expectedAvailableWeight);
 
         // Complete the previous job.
-        completePreviousJob(); // Triggers a release of the weight allotment lock.
+        completePreviousJob(); // Releases the weight allotment lock.
         await startExecutionPromise;
         expectedAvailableWeight += previousJobWeight;
         expectedAvailableWeight -= currentJobWeight;
         expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(1);
         expect(semaphore.availableWeight).toBe(expectedAvailableWeight);
 
-        // Enable the next iteration to complete the current job.
+        // Allows the next iteration to complete the current job.
         previousJobWeight = currentJobWeight;
         completePreviousJob = completeCurrentJob;
       }
@@ -157,8 +157,9 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
     });
 
     test(
-      'honor the FIFO order of weight allotments: should not allot a slot for a new job, until a previous ' +
-      'awaiting job is allotted with a slot first, even if there is a sufficient available weight for the newer job', async () => {
+      'honors the FIFO order of weight allotments: ' +
+      'should not allocate a slot for a new job until the previously awaiting job is allocated a slot, ' +
+      'even if sufficient weight is available for the newer job', async () => {
       // In this test, we use a totalAllowedWeight of 10 and four jobs with weights 6, 5, 1, and 2.
       // The expected timeline of operations is as follows (from left to right):
       // 1. startExecution of the job with weight 6. We expect it to start immediately since the semaphore is available.
@@ -195,13 +196,12 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
       expect(semaphore.availableWeight).toBe(expectedAvailableWeight);
       expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(1);
 
-      // Second job won't succeed starting immediately, as there's no sufficient weight.
-      // It'll acquire the allotment lock, and no other jobs will be able to start before
-      // it does.
-      // 3rd and 4th jobs won't start either, *despite* there is a sufficient available
-      // weight for them, because the 2nd job has not started yet. This proves that the
-      // semaphore honors the FIFO order of job insertion, i.e. available weight alone
-      // is not a sufficient condition for a slot allotment.
+      // The second job won't start immediately due to insufficient weight.
+      // It will acquire the allotment lock, preventing any other jobs from starting before it.
+      // The 3rd and 4th jobs also won't start, *despite* sufficient available weight,
+      // because the 2nd job has not started yet. 
+      // This demonstrates that the semaphore honors the FIFO order of job insertion, i.e.,
+      // available weight alone is not a sufficient condition for slot allotment.
       for (let jobIndex = 1; jobIndex <= 3; ++jobIndex) {
         startJobExecution(jobIndex);
         await resolveFast();
@@ -212,7 +212,7 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
       // Complete the 1st job.
       jobCompletionCallbacks[0]();
       startExecutionPromises.shift();
-      // We expect all other jobs to start successfully, as their total weight is
+      // All other jobs are expected to start successfully, as their total weight is
       // 5+1+2 which is less than 10.
       await Promise.all([startExecutionPromises]);
       await resolveFast();
@@ -222,8 +222,8 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
       expectedAvailableWeight = totalAllowedWeight - jobWeights[1] - jobWeights[2] - jobWeights[3];
       expect(semaphore.availableWeight).toBe(expectedAvailableWeight);
 
-      // Complete the 2nd, 3rd and 4th jobs one by one. Validate available weight and
-      // reported amount of concurrently executing jobs.
+      // Complete the 2nd, 3rd and 4th jobs one by one.
+      // Validate the available weight and the reported amount of concurrently executing jobs.
       for (let jobIndex = 1; jobIndex <= 3; ++jobIndex) {
         jobCompletionCallbacks[jobIndex]();
         await resolveFast();
@@ -240,14 +240,14 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
     });
 
     test(
-      'waitForCompletion stress-test with randomized weights: validating state given a setup of randomly ' +
-      'weighted, big amount of jobs', async () => {
+      'waitForCompletion stress test with randomized weights: ' +
+      'validates the state with a large number of jobs having random weights', async () => {
       // Higher totalAllowedWeight / maxPossibleJobWeight ratio means that more jobs will execute concurrently.
       const totalAllowedWeight = 1029;
       const maxPossibleJobWeight = 397;
       const semaphore = new ZeroBackpressureWeightedSemaphore<void>(totalAllowedWeight);
 
-      const amountOfJobs = 1270; // Sufficiently big to observe statistical errors, if exist.
+      const amountOfJobs = 1270; // Large enough to detect statistical errors, if any exist.
       const jobWeights: number[] = [];
       const jobCompletionCallbacks: PromiseResolveCallbackType[] = [];
       const waitForCompletionPromises: Promise<void>[] = [];
@@ -280,29 +280,29 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
           continue;
         }
 
-        // Current job cannot start immediately as there's no sufficient weight. It acquired the
-        // allotment-lock and awaits for an ongoing-job (or multiple such) to be completed.
+        // The current job cannot start immediately due to insufficient available weight.
+        // It has acquired the allotment lock and is waiting for the completion of one or more ongoing jobs.
         do {
-          // Randomly pick one ongoing job, and complete it. It should increment the
-          // amount of available weight.
+          // Randomly select an ongoing job and complete it.
+          // This will increase the available weight.
           expect(executingJobs.length).toBeGreaterThan(0);
-          const randomExecutingJobsIndex = Math.floor(Math.random() * executingJobs.length);
-          expect(randomExecutingJobsIndex).toBeLessThan(executingJobs.length);
-          const randomOngoingJob = executingJobs[randomExecutingJobsIndex];
+          const randomExecutingJobIndex = Math.floor(Math.random() * executingJobs.length);
+          expect(randomExecutingJobIndex).toBeLessThan(executingJobs.length);
+          const randomOngoingJob = executingJobs[randomExecutingJobIndex];
           executingJobs.splice( // Removes an item from the array, in-place.
-            randomExecutingJobsIndex,
-            1 // Amount of items to remove from the array, which is just 1.
+            randomExecutingJobIndex,
+            1 // Number of items to remove from the array, which is 1.
           );
-          
+
           jobCompletionCallbacks[randomOngoingJob]();
           await waitForCompletionPromises[randomOngoingJob];
 
-          // Update expected state, following completion of the random job.
+          // Update the expected state following the completion of the random job.
           expectedAvailableWeight += jobWeights[randomOngoingJob];
         } while (expectedAvailableWeight < jobWeights[currJob]);
 
-        // At this stage, we know for sure that currJob has began its execution.
-        // The allotment lock should have been released by the just-completed job.
+        // At this stage, we can confirm that currJob has started its execution.
+        // The allotment lock should have been released by the recently completed job.
         expectedAvailableWeight -= jobWeights[currJob];
         executingJobs.push(currJob);
 
@@ -311,7 +311,7 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
         expect(semaphore.availableWeight).toBe(expectedAvailableWeight);
       }
 
-      // Complete the leftovers, i.e. ongoing jobs.
+      // Complete the leftovers, i.e., ongoing jobs.
       while (executingJobs.length > 0) {
         const remainedJob = executingJobs[0];
         executingJobs.shift();
@@ -331,14 +331,14 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
     });
 
     test(
-      'startExecution stress-test with randomized weights: validating state given a setup of randomly ' +
-      'weighted, big amount of jobs', async () => {
+      'startExecution stress test with randomized weights: ' +
+      'validates the state with a large number of jobs having random weights', async () => {
       // Higher totalAllowedWeight / maxPossibleJobWeight ratio means that more jobs will execute concurrently.
       const totalAllowedWeight = 3070;
       const maxPossibleJobWeight = 179;
       const semaphore = new ZeroBackpressureWeightedSemaphore<void>(totalAllowedWeight);
 
-      const amountOfJobs = 800; // Sufficiently big to observe statistical errors, if exist.
+      const amountOfJobs = 800; // Large enough to detect statistical errors, if any exist.
       const jobWeights: number[] = [];
       const jobCompletionCallbacks: PromiseResolveCallbackType[] = [];
       const startExecutionPromises: Promise<void>[] = [];
@@ -371,29 +371,29 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
           continue;
         }
 
-        // Current job cannot start immediately as there's no sufficient weight. It acquired the
-        // allotment-lock and awaits for an ongoing-job (or multiple such) to be completed.
+        // The current job cannot start immediately due to insufficient available weight.
+        // It has acquired the allotment lock and is waiting for the completion of one or more ongoing jobs.
         do {
-          // Randomly pick one ongoing job, and complete it. It should increment the
-          // amount of available weight.
+          // Randomly select an ongoing job and complete it.
+          // This will increase the available weight.
           expect(executingJobs.length).toBeGreaterThan(0);
-          const randomExecutingJobsIndex = Math.floor(Math.random() * executingJobs.length);
-          expect(randomExecutingJobsIndex).toBeLessThan(executingJobs.length);
-          const randomOngoingJob = executingJobs[randomExecutingJobsIndex];
+          const randomExecutingJobIndex = Math.floor(Math.random() * executingJobs.length);
+          expect(randomExecutingJobIndex).toBeLessThan(executingJobs.length);
+          const randomOngoingJob = executingJobs[randomExecutingJobIndex];
           executingJobs.splice( // Removes an item from the array, in-place.
-            randomExecutingJobsIndex,
-            1 // Amount of items to remove from the array, which is just 1.
+            randomExecutingJobIndex,
+            1 // Number of items to remove from the array, which is 1.
           );
           
           jobCompletionCallbacks[randomOngoingJob]();
           await resolveFast();
 
-          // Update expected state, following completion of the random job.
+          // Update the expected state following the completion of the random job.
           expectedAvailableWeight += jobWeights[randomOngoingJob];
         } while (expectedAvailableWeight < jobWeights[currJob]);
 
-        // At this stage, we know for sure that currJob has began its execution.
-        // The allotment lock should have been released by the just-completed job.
+        // At this stage, we can confirm that currJob has started its execution.
+        // The allotment lock should have been released by the recently completed job.
         expectedAvailableWeight -= jobWeights[currJob];
         executingJobs.push(currJob);
 
@@ -423,8 +423,8 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
     });
 
     test(
-      'waitForCompletion stress-test with intentionally induced backpressure, and randomized weights: ' +
-      'validating execution in FIFO order', async () => {
+      'waitForCompletion stress test with intentionally induced backpressure and randomized weights: ' +
+      'validates execution in FIFO order', async () => {
       // Note: While this test deliberately induces backpressure, it's not an efficient usage example.
       // Nonetheless, correctness is preserved regardless of whether backpressure prevention is considered
       // by the user.
@@ -434,14 +434,13 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
       const maxPossibleJobWeight = 31;
       const semaphore = new ZeroBackpressureWeightedSemaphore(totalAllowedWeight);
 
-      const amountOfJobs = 1270; // Sufficiently big to observe statistical errors, if exist.
+      const amountOfJobs = 1270; // Large enough to detect statistical errors, if any exist.
       const jobWeights: number[] = [];
       const jobCompletionCallbacks: PromiseResolveCallbackType[] = [];
       const waitForCompletionPromises: Promise<void>[] = [];
 
-      // Push all jobs at once. Only the prefix-jobs which do not exceed the total
-      // allowed weight will actually start execution, whilst the others will wait
-      // in FIFO order.
+      // Push all jobs at once. Only the initial jobs that do not exceed the total
+      // allowed weight will start execution, while the others will wait in FIFO order.
       for (let currJob = 0; currJob < amountOfJobs; ++currJob) {
         const randomWeight = sampleRandomNaturalNumber(maxPossibleJobWeight);
         jobWeights[currJob] = randomWeight;
@@ -460,7 +459,7 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
       // oldestExecutingJob, oldestExecutingJob + 1, ..., newestExecutingJob
       const executingJobsQueue: number[] = [];
       
-      // Update which jobs are initially executing.
+      // Update the queue of jobs that are initially executing.
       let expectedAvailableWeight = totalAllowedWeight;
       for (let currJob = 0; currJob < amountOfJobs; ++currJob) {
         if (semaphore.availableWeight === expectedAvailableWeight)
@@ -473,7 +472,7 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
       do {
         expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(executingJobsQueue.length);
 
-        // Complete the oldest executing job.
+        // Complete the oldest currently executing job.
         const oldestExecutingJob = executingJobsQueue[0];
         executingJobsQueue.shift(); // Pop the first-in from the queue.
         jobCompletionCallbacks[oldestExecutingJob]();
@@ -481,8 +480,8 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
         await waitForCompletionPromises[oldestExecutingJob];
         await resolveFast();
 
-        // Possibly, more jobs started execution now, as an allotment lock was just released.
-        // In other words, the job which was just-completed added an available weight.
+        // It's possible that more jobs have started execution now, as an allotment lock was just released.
+        // In other words, the completion of the last job has freed up additional weight.
         while (semaphore.availableWeight < expectedAvailableWeight) {
           const justStartedJob = executingJobsQueue[executingJobsQueue.length - 1] + 1;
           executingJobsQueue.push(justStartedJob);
@@ -590,7 +589,9 @@ describe('ZeroBackpressureWeightedSemaphore weighted jobs tests', () => {
 // weighted scenarios.
 describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
     describe('Happy path tests', () => {
-      test('waitForCompletion: should process only one job at a time, when jobs happen to be scheduled sequentially (trivial case)', async () => {
+      test(
+        'waitForCompletion: should process only one job at a time, ' +
+        'when jobs happen to be scheduled sequentially (trivial case)', async () => {
         const totalAllowedWeight = 7;
         const maxConcurrentJobs = totalAllowedWeight; // Each job will have a 1 unit of weight.
         const semaphore = new ZeroBackpressureWeightedSemaphore<void>(
@@ -621,7 +622,9 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
         expect(semaphore.amountOfUncaughtErrors).toBe(0);
       });
 
-      test('waitForCompletion: should process only one job at a time, when max concurrency is 5 and jobs of weight 5 are scheduled concurrently', async () => {
+      test(
+        'waitForCompletion: should process only one job at a time, ' +
+        'when the max concurrency is 5 and all jobs have a weight of 5, and are scheduled concurrently', async () => {
         const totalAllowedWeight = 5;
         const jobWeight = totalAllowedWeight; // Each job consumes all the allowed weight.
         const maxConcurrentJobs = 1;
@@ -644,18 +647,18 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
         }
 
         for (let jobNo = 0; jobNo < numberOfJobs; ++jobNo) {
-          // Just trigger the event loop.
+          // Trigger the event loop.
           await Promise.race([...waitTillCompletionPromises, resolveFast()]);
-          // At this stage, all jobs are pending for execution, except one which has started its execution.
+          // At this stage, all jobs are pending for execution, except one which has started.
 
           // At this stage, jobNo has started its execution.
           expect(semaphore.availableWeight).toBe(0); // Each job consumes all the allowed weight.
           expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(1);
           expect(semaphore.totalAllowedWeight).toBe(totalAllowedWeight);
 
-          // Finish current job.
-          // Note: the order on which jobs will be executed, is the order on which we
-          // invoke semaphore.waitTillCompletion.
+          // Complete the current job.
+          // Note: the order in which jobs start execution corresponds to the order in which
+          // `waitTillCompletion` was invoked.
           const finishCurrentJob = jobCompletionCallbacks[0];
           expect(finishCurrentJob).toBeDefined();
           finishCurrentJob();
@@ -671,10 +674,12 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
         expect(semaphore.amountOfUncaughtErrors).toBe(0);
       });
 
-      test('waitForCompletion: should not exceed max concurrently executing jobs, when the amont of pending jobs is bigger than the amount of slots', async () => {
-        const jobWeight = 9; // Each job will have a weight of 9 units.
+      test(
+        'waitForCompletion: should not exceed the max allowed concurrency (number of concurrently executing jobs), ' +
+        'when there is a backpressure of pending jobs', async () => {
+        const jobWeight = 9; // Each job has a weight of 9 units.
         const maxConcurrentJobs = 5;
-        const totalAllowedWeight = maxConcurrentJobs * jobWeight; // Max of 5 concurrent jobs (as in our case, all jobs have an equal weight).
+        const totalAllowedWeight = maxConcurrentJobs * jobWeight; // Max of 5 concurrent jobs (in our case, all jobs have an equal weight).
         const numberOfJobs = 17 * maxConcurrentJobs - 1;
         const semaphore = new ZeroBackpressureWeightedSemaphore<void>(
           totalAllowedWeight,
@@ -688,14 +693,13 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
           const jobPromise = new Promise<void>(res => jobCompletionCallbacks[jobNo] = res);
           const job: SemaphoreJob<void> = () => jobPromise;
 
-          // Jobs will be executed in the order on which they were registered.
+          // Jobs will be executed in the order in which they were registered.
           const waitPromise = semaphore.waitForCompletion(job, jobWeight);
           waitTillCompletionPromises.push(waitPromise);
         }
 
         for (let jobNo = 0; jobNo < numberOfJobs; ++jobNo) {
-          // Triggering the event loop, allowing the Semaphore to decide which jobs can
-          // start their execution.
+          // Trigger the event loop, allowing the semaphore to determine which jobs can start execution.
           await Promise.race([...waitTillCompletionPromises, resolveFast()]);
 
           // At this stage, jobs [jobNo, min(maxConcurrentJobs, jobNo + maxConcurrentJobs - 1)] are executing.
@@ -707,7 +711,8 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
           expect(semaphore.totalAllowedWeight).toBe(totalAllowedWeight);
 
           // Complete the current job.
-          // Note: the order on which jobs will be executed, is the order on which we invoke semaphore.waitTillCompletion.
+          // Note: the order in which jobs start execution corresponds to the order in which
+          // `waitTillCompletion` was invoked.
           const finishCurrentJob = jobCompletionCallbacks[0];
           expect(finishCurrentJob).toBeDefined();
           finishCurrentJob();
@@ -723,7 +728,7 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
         expect(semaphore.amountOfUncaughtErrors).toBe(0);
       });
 
-      test('waitForCompletion: should return the expected value when succeeds', async () => {
+      test('waitForCompletion: should return the expected value when a job completes successfully', async () => {
         const totalAllowedWeight = 18;
         const semaphore = new ZeroBackpressureWeightedSemaphore<number>(totalAllowedWeight);
         const expectedReturnValue = -1723598;
@@ -736,7 +741,7 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
         expect(semaphore.amountOfUncaughtErrors).toBe(0);
       });
 
-      test('waitForCompletion: should return the expected error when throws', async () => {
+      test('waitForCompletion: should return the expected error when a job throws', async () => {
         const totalAllowedWeight = 3;
         const semaphore = new ZeroBackpressureWeightedSemaphore<number>(totalAllowedWeight);
         const expectedThrownError = new Error("mock error");
@@ -745,7 +750,7 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
 
         try {
           await semaphore.waitForCompletion(job, jobWeight);
-          expect(true).toBe(false); // Necessarily fails, as it shouldn't reach here.
+          expect(true).toBe(false); // This should fail, as execution should not reach this point.
         } catch (actualThrownError) {
           expect(actualThrownError).toBe(expectedThrownError);
         }
@@ -756,9 +761,9 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
       });
 
       test('waitForAllExecutingJobsToComplete: should resolve once all executing jobs are completed', async () => {
-        const jobWeight = 1; // Each job will have a weight of 1 unit.
+        const jobWeight = 1; // Each job has a weight of 1 unit.
         const maxConcurrentJobs = 12;
-        const totalAllowedWeight = maxConcurrentJobs * jobWeight; // Max of 5 concurrent jobs (as in our case, all jobs have an equal weight).
+        const totalAllowedWeight = maxConcurrentJobs * jobWeight; // Max of 12 concurrent jobs (in our case, all jobs have an equal weight).
         const numberOfJobs = maxConcurrentJobs;
         const semaphore = new ZeroBackpressureWeightedSemaphore<void>(
           totalAllowedWeight,
@@ -772,7 +777,7 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
           const jobPromise = new Promise<void>(res => jobCompletionCallbacks[jobNo] = res);
           const job: SemaphoreJob<void> = () => jobPromise;
 
-          // Jobs will be executed in the order on which they were registered.
+          // Jobs will be executed in the order in which they were registered.
           const waitCompletionPromise = semaphore.waitForCompletion(job, jobWeight);
           waitTillCompletionPromises.push(waitCompletionPromise);
         }
@@ -782,7 +787,7 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
 
         // Resolve jobs one by one (sequentially).
         for (let jobNo = 0; jobNo < numberOfJobs; ++jobNo) {
-          // Before resolving.
+          // Pre-resolve validations.
           expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(maxConcurrentJobs - jobNo);
           expect(semaphore.availableWeight).toBe(jobNo);
 
@@ -790,7 +795,7 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
           jobCompletionCallbacks[jobNo]();
           await Promise.race(waitTillCompletionPromises);
 
-          // After resolving.
+          // Post-resolve validations.
           expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(maxConcurrentJobs - jobNo - 1);
           expect(semaphore.availableWeight).toBe(jobNo + 1);
 
@@ -803,10 +808,10 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
         expect(semaphore.amountOfUncaughtErrors).toBe(0);
       });
 
-      test('startExecution: background jobs should not exceed the max given concurrency', async () => {
-        const jobWeight = 17; // Each job will have a weight of 17 units.
+      test('startExecution: background jobs should not exceed the max allowed concurrency', async () => {
+        const jobWeight = 17; // Each job has a weight of 17 units.
         const maxConcurrentJobs = 5;
-        const totalAllowedWeight = maxConcurrentJobs * jobWeight; // Max of 5 concurrent jobs (as in our case, all jobs have an equal weight).
+        const totalAllowedWeight = maxConcurrentJobs * jobWeight; // Max of 5 concurrent jobs (in our case, all jobs have an equal weight).
         const numberOfJobs = 6 * maxConcurrentJobs - 1;
         const semaphore = new ZeroBackpressureWeightedSemaphore<void>(
           totalAllowedWeight,
@@ -815,11 +820,11 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
         const jobCompletionCallbacks: (() => void)[] = [];
 
         // Each main iteration starts execution of the current jobNo, and completes the
-        // (jobNo - maxConcurrentJobs)th job if exist, to make an available slot for
-        // the just-added one.
-        // To validate complex scenarios, even-numbered jobs will succeed while odd-numbered jobs
-        // will throw exceptions. From the semaphore's perspective, a completed job should release
-        // its associated room, regardless of whether it completed successfully or failed.
+        // (jobNo - maxConcurrentJobs)th job if exist, to free up a slot for the newly added job.
+        // To test complex scenarios, even-numbered jobs simulate success, while odd-numbered jobs
+        // simulate failure by throwing an Error.
+        // From the semaphore's perspective, a completed job should release its slot, regardless of
+        // whether it succeeded or failed.
         let numberOfFailedJobs = 0;
         for (let jobNo = 0; jobNo < numberOfJobs; ++jobNo) {
           const shouldJobSucceed = jobNo % 2 === 0; 
@@ -834,7 +839,7 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
           );
           const job: SemaphoreJob<void> = () => jobPromise;
 
-          // Jobs will be executed in the order on which they were registered.
+          // Jobs will be executed in the order in which they were registered.
           const waitTillExecutionStartsPromise = semaphore.startExecution(job, jobWeight);
 
           if (jobNo < maxConcurrentJobs) {
@@ -847,22 +852,22 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
           }
 
           // At this stage, jobs [jobNo - maxConcurrentJobs, jobNo - 1] are executing, whilst jobNo
-          // cannot start yet (none of the currently executing ones has resulted yet).
+          // cannot start yet (none of the currently executing ones has completed yet).
           expect(semaphore.availableWeight).toBe(0);
           expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(maxConcurrentJobs);
           expect(semaphore.totalAllowedWeight).toBe(totalAllowedWeight);
 
-          // Finish oldest job (began executing first, among the currently executing ones).
+          // Complete the oldest job (the first to begin execution among the currently running jobs).
           const completeOldestJob = jobCompletionCallbacks[jobNo - maxConcurrentJobs];
           expect(completeOldestJob).toBeDefined();
           completeOldestJob();
 
-          // Wait until jobNo starts executing, after ensuring an available slot for it.
+          // Wait until jobNo starts executing, after ensuring there is an available slot for it.
           await waitTillExecutionStartsPromise;
         }
 
-        // Completing the remained "tail" of still-executing jobs:
-        // Each main loop completes the current job.
+        // Completing the remaining "tail" of still-executing jobs:
+        // Each iteration of the main loop completes the current job.
         let expectedAvailableWeight = 0;
         let expectedAmountOfCurrentlyExecutingJobs = maxConcurrentJobs;
         const remainedJobsSuffixStart = numberOfJobs - maxConcurrentJobs;
@@ -871,7 +876,7 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
           expect(completeCurrentJob).toBeDefined();
           completeCurrentJob();
 
-          // Just trigger the event loop.
+          // Trigger the event loop.
           await resolveFast();
           expectedAvailableWeight += jobWeight;
           --expectedAmountOfCurrentlyExecutingJobs;
@@ -887,7 +892,9 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
         expect(semaphore.totalAllowedWeight).toBe(totalAllowedWeight);
       });
 
-      test('when _waitForSufficientWeight resolves, its awaiters should be executed according to their order in the microtasks queue', async () => {
+      test(
+        'when _waitForSufficientWeight resolves, its awaiters should be executed according ' +
+        'to their order in the microtasks queue', async () => {
         // This test does not directly assess the semaphore component. Instead, it verifies the
         // correctness of the slot-acquire mechanism, ensuring it honors the FIFO order of callers
         // requesting an available slot.
@@ -912,7 +919,7 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
         const actualExecutionOrderOfAwaiters: number[] = [];
         
         // This specific usage of one promise instance being awaited by multiple other promises
-        // may remind those with a C++ background of a condition_variable.
+        // may remind those with a C++ background of a std::condition_variable.
         let notifyAvailableSlotExists: PromiseResolveCallbackType;
         const waitForAvailableSlot = new Promise(res => notifyAvailableSlotExists = res);
 
@@ -945,7 +952,7 @@ describe('ZeroBackpressureWeightedSemaphore equal-weight jobs tests', () => {
 
     describe('Negative path tests', () => {  
       test('should capture uncaught errors from background jobs triggered by startExecution', async () => {
-        const jobWeight = 1; // Each job will have an equal weight of 1 unit.
+        const jobWeight = 1; // Each job has a weight of 1 unit.
         const totalAllowedWeight = 17 * jobWeight;
         const numberOfJobs = totalAllowedWeight + 18 * jobWeight;
         const jobErrors: CustomJobError[] = [];
