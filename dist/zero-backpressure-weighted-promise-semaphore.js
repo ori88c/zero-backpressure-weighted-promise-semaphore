@@ -114,7 +114,7 @@ class ZeroBackpressureWeightedSemaphore {
         for (let i = 1; i < initialNumberOfSlots; ++i) {
             this._availableSlotsStack[i] = i;
         }
-        this._slots = new Array(initialNumberOfSlots).fill(null);
+        this._slots = new Array(initialNumberOfSlots).fill(undefined);
     }
     /**
      * totalAllowedWeight
@@ -225,7 +225,7 @@ class ZeroBackpressureWeightedSemaphore {
      * @returns A promise that resolves when all currently executing jobs are completed.
      */
     async waitForAllExecutingJobsToComplete() {
-        const pendingJobs = this._slots.filter(job => job !== null);
+        const pendingJobs = this._slots.filter(job => job !== undefined);
         if (pendingJobs.length > 0) {
             await Promise.allSettled(pendingJobs);
         }
@@ -295,7 +295,7 @@ class ZeroBackpressureWeightedSemaphore {
         }
         // 2nd priority: Create a new slot, if all are currently taken.
         const newSlot = this._slots.length;
-        this._slots.push(null);
+        this._slots.push(undefined);
         return newSlot;
     }
     /**
@@ -337,7 +337,7 @@ class ZeroBackpressureWeightedSemaphore {
         }
         finally {
             --this._amountOfCurrentlyExecutingJobs;
-            this._slots[allottedSlot] = null;
+            this._slots[allottedSlot] = undefined;
             this._availableSlotsStack.push(allottedSlot);
             this._availableWeight += weight;
             // Release the allotment lock if it is currently held, and the available

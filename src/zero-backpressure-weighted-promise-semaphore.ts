@@ -81,7 +81,7 @@ const NO_JOB_IS_PENDING_FOR_WEIGHT = -1;
 export class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorType = Error> {
     private readonly _totalAllowedWeight: number;
     private readonly _availableSlotsStack: Array<number>;
-    private readonly _slots: Array<Promise<T> | null>;
+    private readonly _slots: Array<Promise<T> | undefined>;
 
     private _availableWeight: number;
     private _amountOfCurrentlyExecutingJobs: number = 0;
@@ -137,7 +137,7 @@ export class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorType = Err
             this._availableSlotsStack[i] = i;
         }
         
-        this._slots = new Array(initialNumberOfSlots).fill(null);
+        this._slots = new Array(initialNumberOfSlots).fill(undefined);
     }
     
     /**
@@ -257,7 +257,7 @@ export class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorType = Err
      * @returns A promise that resolves when all currently executing jobs are completed.
      */
     public async waitForAllExecutingJobsToComplete(): Promise<void> {
-        const pendingJobs = this._slots.filter(job => job !== null);
+        const pendingJobs = this._slots.filter(job => job !== undefined);
         if (pendingJobs.length > 0) {
             await Promise.allSettled(pendingJobs);
         }
@@ -342,7 +342,7 @@ export class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorType = Err
         
         // 2nd priority: Create a new slot, if all are currently taken.
         const newSlot = this._slots.length;
-        this._slots.push(null);
+        this._slots.push(undefined);
         return newSlot;
     }
 
@@ -389,7 +389,7 @@ export class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorType = Err
             this._uncaughtErrors.push(err);
         } finally {
             --this._amountOfCurrentlyExecutingJobs;
-            this._slots[allottedSlot] = null;
+            this._slots[allottedSlot] = undefined;
             this._availableSlotsStack.push(allottedSlot);
             this._availableWeight += weight;
 
