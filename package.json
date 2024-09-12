@@ -1,6 +1,6 @@
 {
   "name": "zero-backpressure-weighted-promise-semaphore",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "A modern weighted promise semaphore for Node.js projects, ideal for managing workloads with varying processing requirements. It allows limiting the total weight of concurrently executing jobs, ensuring efficient resource utilization. Offering backpressure control for enhanced efficiency, utilizing a communicative API that signals availability. Additionally, it incorporates mechanisms for graceful termination and error handling, making it suitable for complex scenarios.",
   "repository": {
     "type": "git",
@@ -18,14 +18,19 @@
     "test": "jest"
   },
   "keywords": [
-    "weighted",
-    "weight",
-    "semaphore",
+    "weighted-job",
+    "weighted-task",
     "weighted-semaphore",
     "weighted-promise",
+    "weighted-concurrency",
+    "semaphore",
     "promise-semaphore",
     "promise-pool",
+    "weighted-promise-pool",
     "counting-semaphore",
+    "concurrency-management",
+    "concurrency-limit",
+    "concurrency-limiter",
     "mutex",
     "weighted-mutex",
     "lock",
@@ -38,7 +43,6 @@
     "backpressure",
     "graceful-termination",
     "deterministic-termination",
-    "limit",
     "promise-limit",
     "scheduling",
     "executor",
