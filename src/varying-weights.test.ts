@@ -42,8 +42,8 @@ const sampleRandomNaturalNumber = (maxInclusive: number) => 1 + Math.floor(Math.
 describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
   describe('Happy path tests', () => {
     test('should create a sufficient amount of slots during runtime, when the initial estimation is too low', async () => {
-      // The ith job will have a weight of i (1-indexed). We choose a totalAllowedWeight 
-      // such that all jobs can be executed concurrently.
+      // The ith job (i is 0-indexed) will have a weight of i+1.
+      // We choose a totalAllowedWeight such that all jobs can be executed concurrently.
       const numberOfJobs = 27;
       const totalAllowedWeight = numberOfJobs * (numberOfJobs + 1) / 2; // Sufficient for all the jobs to execute concurrently.
       const underestimatedMaxConcurrentJobs = 1; // Intentionally set too low, to active the semaphore's dynamic slots allocation mechanism.
@@ -55,11 +55,11 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
       let expectedAvailableWeight = totalAllowedWeight;
       let expectedAmountOfCurrentlyExecutingJobs = 0;
       const jobCompletionCallbacks: PromiseResolveCallbackType[] = [];
-      for (let jobNo = 1; jobNo <= numberOfJobs; ++jobNo) {
-        const jobPromise = new Promise<void>(res => jobCompletionCallbacks[jobNo] = res);
+      for (let ithJob = 0; ithJob < numberOfJobs; ++ithJob) {
+        const jobPromise = new Promise<void>(res => jobCompletionCallbacks[ithJob] = res);
         const job: SemaphoreJob<void> = () => jobPromise;
 
-        const weight = jobNo;
+        const weight = ithJob + 1;
         await semaphore.startExecution(job, weight); // We expect it to start immediately, as the total weight is sufficient.
 
         ++expectedAmountOfCurrentlyExecutingJobs;
@@ -71,11 +71,11 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
       expect(semaphore.availableWeight).toBe(0); // totalAllowedWeight is set to the sum of all job weights.
       expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(numberOfJobs);
 
-      for (let jobNo = 1; jobNo <= numberOfJobs; ++jobNo) {
-        jobCompletionCallbacks[jobNo]();
-        await resolveFast();
+      for (let ithJob = 0; ithJob < numberOfJobs; ++ithJob) {
+        jobCompletionCallbacks[ithJob]();
+        await resolveFast(); // Trigger the event loop.
         
-        const weight = jobNo;
+        const weight = ithJob + 1;
         expectedAvailableWeight += weight;
         --expectedAmountOfCurrentlyExecutingJobs;
         expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(expectedAmountOfCurrentlyExecutingJobs);
@@ -104,7 +104,7 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
       let expectedAvailableWeight = totalAllowedWeight;
       let completePreviousJob: PromiseResolveCallbackType;
       let previousJobWeight = 0;
-      for (let jobNo = 1; jobNo <= numberOfJobs; ++jobNo) {
+      for (let ithJob = 0; ithJob < numberOfJobs; ++ithJob) {
         expect(semaphore.availableWeight).toBe(expectedAvailableWeight);
 
         let completeCurrentJob: PromiseResolveCallbackType;
@@ -112,9 +112,10 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
         const job: SemaphoreJob<void> = () => jobPromise;
 
         const currentJobWeight = getRandomWeightAboveHalfTotal();
-        const startExecutionPromise = semaphore.startExecution(job, currentJobWeight); // Acquires the weight allotment lock, if jobNo > 1
+        const startExecutionPromise = semaphore.startExecution(job, currentJobWeight); // Attempts to acquire the weight allotment lock.
 
-        if (jobNo === 1) {
+        if (ithJob === 0) {
+          // No competition.
           await startExecutionPromise;
         } else {
           // We expect resolveFast to win the race, because if a previously added job is still executing,
@@ -125,7 +126,7 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
 
         expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(1);
 
-        if (jobNo === 1) {
+        if (ithJob === 0) {
           expectedAvailableWeight -= currentJobWeight;
           previousJobWeight = currentJobWeight;
           completePreviousJob = completeCurrentJob;
@@ -178,11 +179,11 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
       const startExecutionPromises: Promise<void>[] = [];
       let expectedAvailableWeight = totalAllowedWeight;
 
-      const startJobExecution = (jobIndex: number): void => {
+      const startJobExecution = (ithJob: number): void => {
         startExecutionPromises.push(
           semaphore.startExecution(
-            () => new Promise<void>(res => jobCompletionCallbacks[jobIndex] = res),
-            jobWeights[jobIndex]
+            () => new Promise<void>(res => jobCompletionCallbacks[ithJob] = res),
+            jobWeights[ithJob]
           )
         );
       };
@@ -200,8 +201,8 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
       // because the 2nd job has not started yet. 
       // This demonstrates that the semaphore honors the FIFO order of job insertion, i.e.,
       // available weight alone is not a sufficient condition for slot allotment.
-      for (let jobIndex = 1; jobIndex <= 3; ++jobIndex) {
-        startJobExecution(jobIndex);
+      for (let ithJob = 1; ithJob <= 3; ++ithJob) {
+        startJobExecution(ithJob);
         await resolveFast();
         expect(semaphore.availableWeight).toBe(expectedAvailableWeight); // No change.
         expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(1);
@@ -222,11 +223,11 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
 
       // Complete the 2nd, 3rd and 4th jobs one by one.
       // Validate the available weight and the reported amount of concurrently executing jobs.
-      for (let jobIndex = 1; jobIndex <= 3; ++jobIndex) {
-        jobCompletionCallbacks[jobIndex]();
+      for (let ithJob = 1; ithJob <= 3; ++ithJob) {
+        jobCompletionCallbacks[ithJob]();
         await resolveFast();
         --expectedAmountOfCurrentlyExecutingJobs;
-        expectedAvailableWeight += jobWeights[jobIndex];
+        expectedAvailableWeight += jobWeights[ithJob];
         expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(expectedAmountOfCurrentlyExecutingJobs);
         expect(semaphore.availableWeight).toBe(expectedAvailableWeight);
       }
@@ -250,28 +251,28 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
       const jobCompletionCallbacks: PromiseResolveCallbackType[] = [];
       const waitForCompletionPromises: Promise<void>[] = [];
 
-      const pushJob = (jobIndex: number): void => {
+      const pushJob = (ithJob: number): void => {
         const randomWeight = sampleRandomNaturalNumber(maxPossibleJobWeight);
-        jobWeights[jobIndex] = randomWeight;
+        jobWeights[ithJob] = randomWeight;
 
-        waitForCompletionPromises[jobIndex] = semaphore.waitForCompletion(
-          () => new Promise<void>(res => jobCompletionCallbacks[jobIndex] = res),
+        waitForCompletionPromises[ithJob] = semaphore.waitForCompletion(
+          () => new Promise<void>(res => jobCompletionCallbacks[ithJob] = res),
           randomWeight
         );
       };
 
       const executingJobs: number[] = [];
       let expectedAvailableWeight = totalAllowedWeight;
-      for (let currJob = 0; currJob < amountOfJobs; ++currJob) {
-        pushJob(currJob);
+      for (let ithJob = 0; ithJob < amountOfJobs; ++ithJob) {
+        pushJob(ithJob);
 
-        const shouldStartImmediately = expectedAvailableWeight >= jobWeights[currJob];
+        const shouldStartImmediately = expectedAvailableWeight >= jobWeights[ithJob];
         if (shouldStartImmediately) {
           // Trigger the event loop.
-          await Promise.race([waitForCompletionPromises[currJob], resolveFast()]);
+          await Promise.race([waitForCompletionPromises[ithJob], resolveFast()]);
 
-          executingJobs.push(currJob);
-          expectedAvailableWeight -= jobWeights[currJob];
+          executingJobs.push(ithJob);
+          expectedAvailableWeight -= jobWeights[ithJob];
 
           expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(executingJobs.length);
           expect(semaphore.availableWeight).toBe(expectedAvailableWeight);
@@ -297,14 +298,14 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
 
           // Update the expected state following the completion of the random job.
           expectedAvailableWeight += jobWeights[randomOngoingJob];
-        } while (expectedAvailableWeight < jobWeights[currJob]);
+        } while (expectedAvailableWeight < jobWeights[ithJob]);
 
-        // At this stage, we can confirm that currJob has started its execution.
+        // At this stage, we can confirm that ithJob has started its execution.
         // The allotment lock should have been released by the recently completed job.
-        expectedAvailableWeight -= jobWeights[currJob];
-        executingJobs.push(currJob);
+        expectedAvailableWeight -= jobWeights[ithJob];
+        executingJobs.push(ithJob);
 
-        await Promise.race([waitForCompletionPromises[currJob], resolveFast()]);
+        await Promise.race([waitForCompletionPromises[ithJob], resolveFast()]);
         expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(executingJobs.length);
         expect(semaphore.availableWeight).toBe(expectedAvailableWeight);
       }
@@ -341,28 +342,28 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
       const jobCompletionCallbacks: PromiseResolveCallbackType[] = [];
       const startExecutionPromises: Promise<void>[] = [];
 
-      const startJob = (jobIndex: number): void => {
+      const startJob = (ithJob: number): void => {
         const randomWeight = sampleRandomNaturalNumber(maxPossibleJobWeight);
-        jobWeights[jobIndex] = randomWeight;
+        jobWeights[ithJob] = randomWeight;
 
-        startExecutionPromises[jobIndex] = semaphore.startExecution(
-          () => new Promise<void>(res => jobCompletionCallbacks[jobIndex] = res),
+        startExecutionPromises[ithJob] = semaphore.startExecution(
+          () => new Promise<void>(res => jobCompletionCallbacks[ithJob] = res),
           randomWeight
         );
       };
 
       const executingJobs: number[] = [];
       let expectedAvailableWeight = totalAllowedWeight;
-      for (let currJob = 0; currJob < amountOfJobs; ++currJob) {
-        startJob(currJob);
+      for (let ithJob = 0; ithJob < amountOfJobs; ++ithJob) {
+        startJob(ithJob);
 
-        const shouldStartImmediately = expectedAvailableWeight >= jobWeights[currJob];
+        const shouldStartImmediately = expectedAvailableWeight >= jobWeights[ithJob];
         if (shouldStartImmediately) {
           // Trigger the event loop.
-          await startExecutionPromises[currJob];
+          await startExecutionPromises[ithJob];
 
-          executingJobs.push(currJob);
-          expectedAvailableWeight -= jobWeights[currJob];
+          executingJobs.push(ithJob);
+          expectedAvailableWeight -= jobWeights[ithJob];
 
           expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(executingJobs.length);
           expect(semaphore.availableWeight).toBe(expectedAvailableWeight);
@@ -388,14 +389,14 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
 
           // Update the expected state following the completion of the random job.
           expectedAvailableWeight += jobWeights[randomOngoingJob];
-        } while (expectedAvailableWeight < jobWeights[currJob]);
+        } while (expectedAvailableWeight < jobWeights[ithJob]);
 
-        // At this stage, we can confirm that currJob has started its execution.
+        // At this stage, we can confirm that ithJob has started its execution.
         // The allotment lock should have been released by the recently completed job.
-        expectedAvailableWeight -= jobWeights[currJob];
-        executingJobs.push(currJob);
+        expectedAvailableWeight -= jobWeights[ithJob];
+        executingJobs.push(ithJob);
 
-        await startExecutionPromises[currJob];
+        await startExecutionPromises[ithJob];
         expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(executingJobs.length);
         expect(semaphore.availableWeight).toBe(expectedAvailableWeight);
       }
@@ -439,12 +440,12 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
 
       // Push all jobs at once. Only the initial jobs that do not exceed the total
       // allowed weight will start execution, while the others will wait in FIFO order.
-      for (let currJob = 0; currJob < amountOfJobs; ++currJob) {
+      for (let ithJob = 0; ithJob < amountOfJobs; ++ithJob) {
         const randomWeight = sampleRandomNaturalNumber(maxPossibleJobWeight);
-        jobWeights[currJob] = randomWeight;
+        jobWeights[ithJob] = randomWeight;
 
-        waitForCompletionPromises[currJob] = semaphore.waitForCompletion(
-          () => new Promise<void>(res => jobCompletionCallbacks[currJob] = res),
+        waitForCompletionPromises[ithJob] = semaphore.waitForCompletion(
+          () => new Promise<void>(res => jobCompletionCallbacks[ithJob] = res),
           randomWeight
         );
       }
@@ -459,12 +460,12 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
       
       // Update the queue of jobs that are initially executing.
       let expectedAvailableWeight = totalAllowedWeight;
-      for (let currJob = 0; currJob < amountOfJobs; ++currJob) {
+      for (let ithJob = 0; ithJob < amountOfJobs; ++ithJob) {
         if (semaphore.availableWeight === expectedAvailableWeight)
           break;
 
-        executingJobsQueue.push(currJob);
-        expectedAvailableWeight -= jobWeights[currJob];
+        executingJobsQueue.push(ithJob);
+        expectedAvailableWeight -= jobWeights[ithJob];
       }
 
       do {
