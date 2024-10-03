@@ -21,7 +21,8 @@ Each use case necessitates distinct handling capabilities, which will be discuss
 - __High Efficiency :gear:__: All state-altering operations have a constant time complexity, O(1).
 - __Comprehensive Documentation :books:__: The class is thoroughly documented, enabling IDEs to provide helpful tooltips that enhance the coding experience.
 - __Robust Error Handling__: Uncaught errors from background jobs triggered by `startExecution` are captured and can be accessed using the `extractUncaughtErrors` method.
-- __Tests__: **Fully covered** by rigorous unit tests, including stress tests with randomized weights.
+- __Metrics :bar_chart:__: The class offers various metrics through getter methods, providing insights into the semaphore's current state.
+- __Tests :test_tube:__: **Fully covered** by rigorous unit tests, including stress tests with randomized weights.
 - Self-explanatory method names.
 - No external runtime dependencies: Only development dependencies are used.
 - ES2020 Compatibility: The `tsconfig` target is set to ES2020, ensuring compatibility with ES2020 environments.
@@ -34,6 +35,26 @@ Traditional semaphore APIs require explicit *acquire* and *release* steps, addin
 In contrast, `ZeroBackpressureWeightedSemaphore` manages job execution, abstracting away these details and reducing user responsibility. The *acquire* and *release* steps are handled implicitly by the execution methods, reminiscent of the RAII idiom in C++.
 
 Method names are chosen to clearly convey their functionality.
+
+## API :globe_with_meridians:
+
+The `ZeroBackpressureWeightedSemaphore` class provides the following methods:
+
+* __startExecution__: Resolves once the given job has **started** its execution. Users can leverage this to prevent backpressure of pending jobs; If the semaphore is too busy to start a given job `X`, there is no reason to create another job `Y` until `X` has started. This method is particularly useful for background job workers that frequently retrieve job metadata from external sources, such as pulling messages from a message broker.
+* __waitForCompletion__: Executes the given job in a controlled manner, once there is an available slot. It resolves or rejects when the job **completes** execution, returning the job's value or propagating any error it may throw.
+* __waitForAllExecutingJobsToComplete__: Resolves when all **currently** executing jobs have finished, meaning once all running promises have either resolved or rejected. This is particularly useful in scenarios where you need to ensure that all jobs are completed before proceeding, such as during shutdown processes or between unit tests.
+* __extractUncaughtErrors__: Returns an array of uncaught errors, captured by the semaphore while executing background jobs added by `startExecution`. The instance will no longer hold these error references once extracted. In other words, ownership of these uncaught errors shifts to the caller, while the semaphore clears its list of uncaught errors.
+
+If needed, refer to the code documentation for a more comprehensive description of each method.
+
+## Getter Methods :mag:
+
+The `ZeroBackpressureWeightedSemaphore` class provides the following getter methods to reflect the current state:
+
+* __totalAllowedWeight__: The maximum allowed sum of weights (inclusive) for jobs executed concurrently. This value is set in the constructor and remains constant throughout the instance's lifespan.
+* __availableWeight__: The currently available, non-allotted amount of weight.
+* __amountOfCurrentlyExecutingJobs__: The number of jobs currently being executed by the semaphore.
+* __amountOfUncaughtErrors__: The number of uncaught errors from background jobs triggered by `startExecution`, that are currently stored by the instance. These errors have not yet been extracted using `extractUncaughtErrors`.
 
 ## 1st use-case: Multiple Jobs Execution :man_technologist:
 
@@ -194,7 +215,7 @@ async function processConsumedMessages(): Promise<void> {
   while (true) {
     const message = await mqClient.receiveOneMessage();
     if (!message) {
-      // Consider the queue as empty, for simplicity.
+      // Consider the queue as empty, for simplicity of this example.
       break;
     }
 
