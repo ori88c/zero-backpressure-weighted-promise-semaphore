@@ -170,7 +170,11 @@ export class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorType = Err
     /**
      * amountOfUncaughtErrors
      * 
-     * @returns The number of uncaught errors from background jobs, triggered by `startExecution`.
+     * Indicates the number of uncaught errors from background jobs triggered by `startExecution`,
+     * that are currently stored by the instance.
+     * These errors have not yet been extracted using `extractUncaughtErrors`.
+     * 
+     * @returns The number of uncaught errors from background jobs.
      */	
     public get amountOfUncaughtErrors(): number {
         return this._uncaughtErrors.length;
@@ -245,16 +249,17 @@ export class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorType = Err
     /**
      * waitForAllExecutingJobsToComplete
      * 
-     * This method allows the caller to wait until all currently executing jobs have completed.
-     * It is useful for ensuring that the application can terminate gracefully, without leaving 
-     * any pending operations.
+     * This method allows the caller to wait until all *currently* executing jobs have finished,
+     * meaning once all running promises have either resolved or rejected.
      * 
-     * When this method is called, it returns a promise that resolves once all currently running 
-     * promises have either resolved or rejected. This is particularly useful in scenarios where 
-     * you need to ensure that all tasks are completed before proceeding, such as during shutdown 
-     * processes or between unit tests.
+     * This is particularly useful in scenarios where you need to ensure that all jobs are completed
+     * before proceeding, such as during shutdown processes or between unit tests.
      * 
-     * @returns A promise that resolves when all currently executing jobs are completed.
+     * Note that the returned promise only awaits jobs that were executed at the time this method
+     * was called. Specifically, it awaits all jobs initiated by this instance that had not completed
+     * at the time of invocation.
+     * 
+     * @returns A promise that resolves when all currently executing tasks are completed.
      */
     public async waitForAllExecutingJobsToComplete(): Promise<void> {
         const pendingJobs = this._slots.filter(job => job !== undefined);
