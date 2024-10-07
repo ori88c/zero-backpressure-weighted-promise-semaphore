@@ -1,6 +1,6 @@
 {
   "name": "zero-backpressure-weighted-promise-semaphore",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "A modern weighted promise semaphore for Node.js projects, ideal for managing workloads with varying processing requirements. It allows limiting the total weight of concurrently executing jobs, ensuring efficient resource utilization. Offering backpressure control for enhanced efficiency, utilizing a communicative API that signals availability. Additionally, it incorporates mechanisms for graceful termination and error handling, making it suitable for complex scenarios.",
   "repository": {
     "type": "git",
