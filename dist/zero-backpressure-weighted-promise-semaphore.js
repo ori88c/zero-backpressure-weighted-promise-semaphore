@@ -147,6 +147,9 @@ class ZeroBackpressureWeightedSemaphore {
      * that are currently stored by the instance.
      * These errors have not yet been extracted using `extractUncaughtErrors`.
      *
+     * Knowing the number of uncaught errors allows users to decide whether to process them immediately
+     * or wait for further accumulation.
+     *
      * @returns The number of uncaught errors from background jobs.
      */
     get amountOfUncaughtErrors() {
@@ -227,7 +230,7 @@ class ZeroBackpressureWeightedSemaphore {
      * was called. Specifically, it awaits all jobs initiated by this instance that had not completed
      * at the time of invocation.
      *
-     * @returns A promise that resolves when all currently executing tasks are completed.
+     * @returns A promise that resolves when all currently executing jobs are completed.
      */
     async waitForAllExecutingJobsToComplete() {
         const pendingJobs = this._slots.filter(job => job !== undefined);

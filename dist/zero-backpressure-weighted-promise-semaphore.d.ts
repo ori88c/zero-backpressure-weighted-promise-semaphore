@@ -117,6 +117,9 @@ export declare class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorTy
      * that are currently stored by the instance.
      * These errors have not yet been extracted using `extractUncaughtErrors`.
      *
+     * Knowing the number of uncaught errors allows users to decide whether to process them immediately
+     * or wait for further accumulation.
+     *
      * @returns The number of uncaught errors from background jobs.
      */
     get amountOfUncaughtErrors(): number;
@@ -184,7 +187,7 @@ export declare class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorTy
      * was called. Specifically, it awaits all jobs initiated by this instance that had not completed
      * at the time of invocation.
      *
-     * @returns A promise that resolves when all currently executing tasks are completed.
+     * @returns A promise that resolves when all currently executing jobs are completed.
      */
     waitForAllExecutingJobsToComplete(): Promise<void>;
     /**
