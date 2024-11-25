@@ -1,6 +1,6 @@
 <h2 align="middle">Zero Backpressure Weighted Promise Semaphore</h2>
 
-The `ZeroBackpressureWeightedSemaphore` class implements a modern Promise Semaphore for Node.js projects, allowing users to limit the concurrency of **weighted** jobs.
+The `ZeroBackpressureWeightedSemaphore` class implements a modern Promise Semaphore for Node.js projects, allowing users to limit the concurrency of **weighted** jobs. It serves as the weighted counterpart to the [zero-backpressure-semaphore-typescript](https://www.npmjs.com/package/zero-backpressure-semaphore-typescript) package.
 
 Each job is associated with a natural-number weight (1, 2, 3, ...). The semaphore guarantees that the total weight of concurrently executing jobs never exceeds a user-defined limit. The use of natural numbers for weights is mandated to prevent floating-point precision issues inherent in JavaScript.
 
@@ -36,12 +36,12 @@ Each use case necessitates distinct handling capabilities, which will be discuss
 - __High Efficiency :gear:__: All state-altering operations have a constant time complexity, O(1).
 - __Comprehensive Documentation :books:__: The class is thoroughly documented, enabling IDEs to provide helpful tooltips that enhance the coding experience.
 - __Robust Error Handling__: Uncaught errors from background jobs triggered by `startExecution` are captured and can be accessed using the `extractUncaughtErrors` method.
-- __Metrics :bar_chart:__: The class offers various metrics through getter methods, providing insights into the semaphore's current state.
+- __Metrics :bar_chart:__: The class offers various metrics through getter methods, such as `amountOfCurrentlyExecutingJobs` and `availableWeight`, providing insights into the semaphore's current state. These metrics can be used for periodic logging or to collect statistics from real-world usage.
 - __Tests :test_tube:__: **Fully covered** by rigorous unit tests, including stress tests with randomized weights.
+- **TypeScript** support.
 - Self-explanatory method names.
 - No external runtime dependencies: Only development dependencies are used.
 - ES2020 Compatibility: The `tsconfig` target is set to ES2020, ensuring compatibility with ES2020 environments.
-- TypeScript support.
 
 ## Modern API Design :rocket:<a id="modern-api-design"></a>
 
