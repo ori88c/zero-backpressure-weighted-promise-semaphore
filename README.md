@@ -87,7 +87,9 @@ This semaphore variant excels in eliminating backpressure when dispatching multi
 Here, the start time of each job is crucial. Since a pending job cannot start its execution until the semaphore allows, there is no benefit to adding additional jobs that cannot start immediately. The `startExecution` method communicates the job's start time to the caller (resolves as soon as the job starts), which enables to create a new job as-soon-as it makes sense.
 
 For example, consider an application responsible for training 1M Machine Learning models, on a shared GPU resource. Different models require different amounts of GPU memory and processing power. A weighted semaphore can manage the total GPU memory usage, allowing only certain combinations of models to train concurrently. Being specific, combinations which do not exceed the GPU capacity.  
-Rather than pre-creating 1M jobs (one for each model), which could potentially overwhelm the Node.js task queue and induce backpressure, the system should adopt a **just-in-time** approach. This means creating a model-training job **only when the semaphore indicates availability**, thereby optimizing resource utilization and maintaining system stability.
+Instead of loading all models into memory and pre-creating 1M jobs (one for each model), which could potentially overwhelm the Node.js task queue and induce backpressure, the system should adopt a **just-in-time** approach. This means creating a model-training job **only when the semaphore indicates availability**, thereby optimizing resource utilization and maintaining system stability.
+
+The following example demonstrates fetching models using an `AsyncGenerator`. Async generators and iterators are widely adopted in modern APIs, providing efficient handling of potentially large data sets. For instance, the [AWS-SDK](https://aws.amazon.com/blogs/developer/pagination-using-async-iterators-in-modular-aws-sdk-for-javascript/) utilizes them for pagination, abstracting away complexities like managing offsets. Similarly, [MongoDB's cursor](https://www.mongodb.com/docs/manual/reference/method/db.collection.find/) enables iteration over a large number of documents in a paginated and asynchronous manner. These abstractions elegantly handle pagination internally, sparing users the complexities of managing offsets and other low-level details. By awaiting the semaphore's availability, the **space complexity** is implicitly constrained to *O(max(page-size, semaphore-capacity))*, as the `AsyncGenerator` fetches a new page only after all models from the current page have initiated training.
 
 Note: method `waitForAllExecutingJobsToComplete` can be used to perform post-processing, after all jobs have completed. It complements the typical use-cases of `startExecution`.
 
@@ -109,8 +111,12 @@ const trainingSemaphore = new ZeroBackpressureWeightedSemaphore<void>(
   estimatedMaxNumberOfConcurrentJobs // Optional argument; can reduce dynamic slot allocations for optimization purposes.
 );
 
-async function trainModels(models: ReadonlyArray<ModelInfo>) {
+async function trainModels(models: AsyncGenerator<ModelInfo>) {
+  let fetchedModelsCounter = 0;
+
   for (const model of models) {
+    ++fetchedModelsCounter;
+
     // Until the semaphore can start training the current model, adding more
     // jobs won't make sense as this would induce unnecessary backpressure.
     await trainingSemaphore.startExecution(
@@ -123,7 +129,7 @@ async function trainModels(models: ReadonlyArray<ModelInfo>) {
 
   // Graceful termination: await the completion of all currently executing jobs.
   await trainingSemaphore.waitForAllExecutingJobsToComplete();
-  console.info(`Finished training ${models.length} ML models`);
+  console.info(`Finished training ${fetchedModelsCounter} ML models`);
 }
 
 async function handleModelTraining(model: Readonly<ModelInfo>): Promise<void> {
@@ -131,7 +137,7 @@ async function handleModelTraining(model: Readonly<ModelInfo>): Promise<void> {
 }
 ```
 
-If the jobs might throw errors, you don't need to worry about these errors propagating up to the event loop and potentially crashing the application. Uncaught errors from jobs triggered by `startExecution` are captured by the semaphore and can be safely accessed for post-processing purposes (e.g., metrics).  
+If jobs might throw errors, you don't need to worry about these errors propagating to the event loop and potentially crashing the application. Uncaught errors from jobs triggered by `startExecution` are captured by the semaphore and can be safely accessed for post-processing purposes (e.g., metrics).  
 Refer to the following adaptation of the above example, now utilizing the semaphore's error handling capabilities:
 
 ```ts
@@ -159,8 +165,12 @@ const trainingSemaphore =
     estimatedMaxNumberOfConcurrentJobs // Optional argument; can reduce dynamic slot allocations for optimization purposes.
   );
 
-async function trainModels(models: ReadonlyArray<ModelInfo>) {
+async function trainModels(models: AsyncGenerator<ModelInfo>) {
+  let fetchedModelsCounter = 0;
+
   for (const model of models) {
+    ++fetchedModelsCounter;
+
     // Until the semaphore can start training the current model, adding more
     // jobs won't make sense as this would induce unnecessary backpressure.
     await trainingSemaphore.startExecution(
@@ -183,7 +193,7 @@ async function trainModels(models: ReadonlyArray<ModelInfo>) {
   // Summary:
   // The API's support for graceful termination is particularly valuable for handling
   // post-processing or clean-up tasks after the main operations are complete.
-  const successfulJobsCount = models.length - errors.length;
+  const successfulJobsCount = fetchedModelsCounter - errors.length;
   logger.info(
     `Successfully trained ${successfulJobsCount} models, ` +
     `with failures in training ${errors.length} models`
@@ -192,79 +202,6 @@ async function trainModels(models: ReadonlyArray<ModelInfo>) {
 
 async function handleModelTraining(model: Readonly<ModelInfo>): Promise<void> {
   // Implementation goes here. 
-}
-```
-
-Please note that in a real-world scenario, models may be consumed from a message queue (e.g., RabbitMQ, Kafka, AWS SNS) rather than from an in-memory array. This setup **highlights the benefits** of avoiding backpressure:  
-Working with message queues typically involves acknowledgements, which have **timeout** mechanisms. Therefore, immediate processing is crucial to ensure efficient and reliable handling of messages. Backpressure on the semaphore means that messages experience longer delays before their corresponding jobs start execution.  
-Refer to the following adaptation of the previous example, where models are consumed from a message queue. This example overlooks error handling and message validation, for simplicity.
-
-```ts
-import {
-  ZeroBackpressureWeightedSemaphore,
-  SemaphoreJob
-} from 'zero-backpressure-weighted-promise-semaphore';
-
-interface ModelInfo {
-  weight: number; // Must be a natural number: 1,2,3,...
-  // Additional model fields.
-};
-
-interface CustomModelError extends Error {
-  model: ModelInfo; // In this manner, later you can associate an error with its model.
-  // Alternatively, a custom error may contain just a few fields of interest.
-}
-
-const totalAllowedWeight = 180;
-const estimatedMaxNumberOfConcurrentJobs = 12;
-const trainingSemaphore =
-  new ZeroBackpressureWeightedSemaphore<void, CustomModelError>(
-    totalAllowedWeight,
-    estimatedMaxNumberOfConcurrentJobs
-  );
-
-const ML_MODELS_TOPIC = "ML_MODELS_PENDING_FOR_TRAINING";
-const mqClient = new GenericMessageQueueClient(ML_MODELS_TOPIC);
-
-async function processConsumedMessages(): Promise<void> {
-  let numberOfProcessedMessages = 0;
-
-  while (true) {
-    const message = await mqClient.receiveOneMessage();
-    if (!message) {
-      // Consider the queue as empty, for simplicity of this example.
-      break;
-    }
-
-    const modelInfo: ModelInfo = message.data;
-    const job = async (): Promise<void> => {
-      await handleModelTraining(modelInfo);
-      ++numberOfProcessedMessages;
-      await mqClient.removeMessageFromQueue(message);
-    };
-
-    await trainingSemaphore.startExecution(job, modelInfo.weight);
-  }
-  // Note: at this stage, jobs might be still executing, as we did not wait for
-  // their completion.
-
-  // Graceful termination: await the completion of all currently executing jobs.
-  await trainingSemaphore.waitForAllExecutingJobsToComplete();
-
-  // Post processing.
-  const errors = trainingSemaphore.extractUncaughtErrors();
-  if (errors.length > 0) {
-    await updateFailedTrainingMetrics(errors);
-  }
-
-  // Summary:
-  // The API's support for graceful termination is particularly valuable for handling
-  // post-processing or clean-up tasks after the main operations are complete.
-  const successfulJobsCount = models.length - errors.length;
-  logger.info(
-    `Successfully trained ${successfulJobsCount} models, ` +
-    `with failures in training ${errors.length} models`
-  );
 }
 ```
 
