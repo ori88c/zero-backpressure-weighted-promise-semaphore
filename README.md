@@ -21,7 +21,7 @@ Each use case necessitates distinct handling capabilities, which will be discuss
 * [Getter Methods](#getter-methods)
 * [1st use-case: Multiple Jobs Execution](#first-use-case)
 * [2nd use-case: Single Job Execution](#second-use-case)
-* [Graceful Termination](#graceful-termination)
+* [Graceful Teardown](#graceful-teardown)
 * [Error Handling for Background Jobs](#error-handling)
 * [Unavoidable / Implicit Backpressure](#unavoidable-backpressure)
 * [Promise Semaphores Are Not Promise Pools](#not-promise-pool)
@@ -31,8 +31,8 @@ Each use case necessitates distinct handling capabilities, which will be discuss
 ## Key Features :sparkles:<a id="key-features"></a>
 
 - __Weighted Jobs :weight_lifting_woman:__: Suitable for situations where jobs have **varying** processing requirements, such as in backend applications managing resource load. For instance, consider multiple machine learning models being trained on a shared GPU resource. Each model demands different amounts of GPU memory and processing power. A weighted semaphore can regulate the total GPU memory usage, ensuring that only a specific combination of models is trained concurrently, thus preventing the GPU capacity from being exceeded.
-- __Backpressure Control__: Ideal for job workers and background services. Concurrency control alone isn't sufficient to ensure stability and performance if backpressure control is overlooked. Without backpressure control, the heap can become overloaded, resulting in space complexity of O(*semaphore-slots* + *pending-jobs*) instead of O(*semaphore-slots*).
-- __Graceful Termination__: Await the completion of all currently executing jobs via the `waitForAllExecutingJobsToComplete` method.
+- __Backpressure Control :vertical_traffic_light:__: Ideal for job workers and background services. Concurrency control alone isn't sufficient to ensure stability and performance if backpressure control is overlooked. Without backpressure control, the heap can become overloaded, resulting in space complexity of O(*semaphore-slots* + *pending-jobs*) instead of O(*semaphore-slots*).
+- __Graceful Teardown :hourglass_flowing_sand:__: Await the completion of all currently executing jobs via the `waitForAllExecutingJobsToComplete` method. Example use cases include **application shutdowns** (e.g., `onModuleDestroy` in Nest.js applications) or maintaining a clear state between unit-tests.
 - __High Efficiency :gear:__: All state-altering operations have a constant time complexity, O(1).
 - __Comprehensive Documentation :books:__: The class is thoroughly documented, enabling IDEs to provide helpful tooltips that enhance the coding experience.
 - __Robust Error Handling__: Uncaught errors from background jobs triggered by `startExecution` are captured and can be accessed using the `extractUncaughtErrors` method.
@@ -106,15 +106,16 @@ interface ModelInfo {
 
 const totalAllowedWeight = 180;
 const estimatedMaxNumberOfConcurrentJobs = 12;
-const trainingSemaphore = new ZeroBackpressureWeightedSemaphore<void>(
-  totalAllowedWeight,
-  estimatedMaxNumberOfConcurrentJobs // Optional argument; can reduce dynamic slot allocations for optimization purposes.
-);
 
 async function trainModels(models: AsyncGenerator<ModelInfo>) {
+  const trainingSemaphore = new ZeroBackpressureWeightedSemaphore<void>(
+    totalAllowedWeight,
+    // Optional argument; can reduce dynamic slot allocations for optimization purposes.
+    estimatedMaxNumberOfConcurrentJobs
+  );
   let fetchedModelsCounter = 0;
 
-  for (const model of models) {
+  for await (const model of models) {
     ++fetchedModelsCounter;
 
     // Until the semaphore can start training the current model, adding more
@@ -151,24 +152,32 @@ interface ModelInfo {
   // Additional model fields.
 };
 
-interface CustomModelError extends Error {
-  model: ModelInfo; // In this manner, later you can associate an error with its model.
-  // Alternatively, a custom error may contain just a few fields of interest.
+// Since errors are extracted during a post-processing phase, using a
+// custom error class allows each error to be associated with its model.
+class CustomModelError extends Error {
+  constructor(
+    message: string,
+    public readonly model: ModelInfo
+  ) {
+    super(message);
+    this.name = this.constructor.name;
+    Object.setPrototypeOf(this, CustomModelError.prototype);
+  }
 }
 
 const totalAllowedWeight = 180;
 const estimatedMaxNumberOfConcurrentJobs = 12;
-const trainingSemaphore =
-  // Notice the 2nd generic parameter (Error by default).
-  new ZeroBackpressureWeightedSemaphore<void, CustomModelError>(
-    totalAllowedWeight,
-    estimatedMaxNumberOfConcurrentJobs // Optional argument; can reduce dynamic slot allocations for optimization purposes.
-  );
 
 async function trainModels(models: AsyncGenerator<ModelInfo>) {
+  // Notice the 2nd generic parameter (Error by default).
+  const trainingSemaphore = new ZeroBackpressureWeightedSemaphore<void, CustomModelError>(
+    totalAllowedWeight,
+    // Optional argument; can reduce dynamic slot allocations for optimization purposes.
+    estimatedMaxNumberOfConcurrentJobs
+  );
   let fetchedModelsCounter = 0;
 
-  for (const model of models) {
+  for await (const model of models) {
     ++fetchedModelsCounter;
 
     // Until the semaphore can start training the current model, adding more
@@ -253,13 +262,13 @@ app.get('/user/', async (req, res) => {
 });
 ```
 
-## Graceful Termination :hourglass:<a id="graceful-termination"></a>
+## Graceful Teardown :hourglass_flowing_sand:<a id="graceful-teardown"></a>
 
-The `waitForAllExecutingJobsToComplete` method is essential for scenarios where it is necessary to wait for all ongoing jobs to finish, such as logging a success message or executing subsequent logic. Without this built-in capability, developers would have to implement periodic polling of the semaphore or other indicators to monitor progress, which can increase both implementation complexity and resource usage.
+The `waitForAllExecutingJobsToComplete` method is essential for scenarios where it is necessary to **wait for all ongoing jobs to finish**, such as logging a success message or executing subsequent logic. Without this built-in capability, developers would have to implement periodic polling of the semaphore or other indicators to monitor progress, which can increase both implementation complexity and resource usage.
 
-A key use case for this method is ensuring stable unit tests. Each test should start with a clean state, independent of others, to avoid interference. This prevents scenarios where a job from Test A inadvertently continues to execute during Test B.
+Example use cases include application shutdowns (e.g., `onModuleDestroy` in Nest.js applications) or maintaining a clear state between unit-tests to ensure stability. Each test should start with a clean state, independent of others, to avoid interference. This prevents scenarios where a job from Test A inadvertently continues to execute during Test B.
 
-If your component has a termination method (`stop`, `terminate`, or similar), keep that in mind.
+If your component has a termination method (`stop`, `terminate`, `dispose` or similar), keep that in mind.
 
 ## Error Handling for Background Jobs :warning:<a id="error-handling"></a>
 

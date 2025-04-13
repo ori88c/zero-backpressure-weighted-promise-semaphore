@@ -19,8 +19,6 @@ exports.ZeroBackpressureWeightedSemaphore = void 0;
 const DEFAULT_NUMBERS_OF_SLOTS = 16;
 const NO_JOB_IS_PENDING_FOR_WEIGHT = -1;
 /**
- * ZeroBackpressureWeightedSemaphore
- *
  * The `ZeroBackpressureWeightedSemaphore` class implements a Promise Semaphore for Node.js projects,
  * enabling users to limit the concurrency of *weighted* jobs.
  * Each job is associated with a natural-number weight (1, 2, 3, ...). The semaphore guarantees that the
@@ -74,17 +72,14 @@ const NO_JOB_IS_PENDING_FOR_WEIGHT = -1;
  * - **Initialization**: O(estimatedMaxNumberOfConcurrentJobs) for both time and space.
  * - **startExecution, waitForCompletion**: O(1) for both time and space, excluding the job execution itself.
  * - All the getter methods have O(1) complexity for both time and space.
- *
  */
 class ZeroBackpressureWeightedSemaphore {
     /**
-     * Constructor
-     *
-     * @param totalAllowedWeight - The maximum allowed sum of weights (inclusive) for jobs executed concurrently.
-     * @param estimatedMaxNumberOfConcurrentJobs - Estimated maximum number of concurrently executing jobs.
-     *                                             A higher estimate reduces the likelihood of additional slot
-     *                                             allocations during runtime. Please observe that the upper bound
-     *                                             is `totalAllowedWeight`, as the minimum weight is 1.
+     * @param totalAllowedWeight The maximum allowed sum of weights (inclusive) for jobs executed concurrently.
+     * @param estimatedMaxNumberOfConcurrentJobs Estimated maximum number of concurrently executing jobs.
+     *                                           A higher estimate reduces the likelihood of additional slot
+     *                                           allocations during runtime. Please observe that the upper bound
+     *                                           is `totalAllowedWeight`, as the minimum weight is 1.
      */
     constructor(totalAllowedWeight, estimatedMaxNumberOfConcurrentJobs = DEFAULT_NUMBERS_OF_SLOTS) {
         this._amountOfCurrentlyExecutingJobs = 0;
@@ -117,32 +112,24 @@ class ZeroBackpressureWeightedSemaphore {
         this._slots = new Array(initialNumberOfSlots).fill(undefined);
     }
     /**
-     * totalAllowedWeight
-     *
      * @returns The maximum allowed sum of weights (inclusive) for jobs executed concurrently.
      */
     get totalAllowedWeight() {
         return this._totalAllowedWeight;
     }
     /**
-     * availableWeight
-     *
      * @returns The currently available, non-allotted amount of weight.
      */
     get availableWeight() {
         return this._availableWeight;
     }
     /**
-     * amountOfCurrentlyExecutingJobs
-     *
      * @returns The number of jobs currently being executed by the semaphore.
      */
     get amountOfCurrentlyExecutingJobs() {
         return this._amountOfCurrentlyExecutingJobs;
     }
     /**
-     * amountOfUncaughtErrors
-     *
      * Indicates the number of uncaught errors from background jobs triggered by `startExecution`,
      * that are currently stored by the instance.
      * These errors have not yet been extracted using `extractUncaughtErrors`.
@@ -156,8 +143,6 @@ class ZeroBackpressureWeightedSemaphore {
         return this._uncaughtErrors.length;
     }
     /**
-     * startExecution
-     *
      * This method resolves once the given job has *started* its execution, indicating that the
      * semaphore has allotted sufficient weight for the job.
      * Users can leverage this to prevent backpressure of pending jobs:
@@ -177,9 +162,9 @@ class ZeroBackpressureWeightedSemaphore {
      * `extractUncaughtError` method. Users are encouraged to specify a custom `UncaughtErrorType`
      * generic parameter to the class if jobs may throw errors.
      *
-     * @param backgroundJob - The job to be executed once the semaphore is available.
-     * @param weight - A natural number representing the weight associated with the job.
-     * @throws - Error if the weight is not a natural number (1, 2, 3, ...).
+     * @param backgroundJob The job to be executed once the semaphore is available.
+     * @param weight A natural number representing the weight associated with the job.
+     * @throws Error if the weight is not a natural number (1, 2, 3, ...).
      * @returns A promise that resolves when the job starts execution.
      */
     async startExecution(backgroundJob, weight) {
@@ -190,8 +175,6 @@ class ZeroBackpressureWeightedSemaphore {
         return;
     }
     /**
-     * waitForCompletion
-     *
      * This method executes the given job in a controlled manner, once the semaphore has allotted
      * sufficient weight for the job. It resolves or rejects when the job finishes execution, returning
      * the job's value or propagating any error it may throw.
@@ -205,10 +188,10 @@ class ZeroBackpressureWeightedSemaphore {
      * This method allows you to execute the job with controlled concurrency. Once the job resolves
      * or rejects, you can continue the route handler's flow based on the result.
      *
-     * @param job - The job to be executed once the semaphore is available.
-     * @param weight - A natural number representing the weight associated with the job.
-     * @throws - Error if the weight is not a natural number (1, 2, 3, ...).
-     *           Alternatively, an error thrown by the job itself.
+     * @param job The job to be executed once the semaphore is available.
+     * @param weight A natural number representing the weight associated with the job.
+     * @throws Error if the weight is not a natural number (1, 2, 3, ...).
+     *         Alternatively, an error thrown by the job itself.
      * @returns A promise that resolves with the job's return value or rejects with its error.
      */
     async waitForCompletion(job, weight) {
@@ -218,8 +201,6 @@ class ZeroBackpressureWeightedSemaphore {
         return this._slots[availableSlot] = this._handleJobExecution(job, availableSlot, weight, false);
     }
     /**
-     * waitForAllExecutingJobsToComplete
-     *
      * This method allows the caller to wait until all *currently* executing jobs have finished,
      * meaning once all running promises have either resolved or rejected.
      *
@@ -229,6 +210,13 @@ class ZeroBackpressureWeightedSemaphore {
      * Note that the returned promise only awaits jobs that were executed at the time this method
      * was called. Specifically, it awaits all jobs initiated by this instance that had not completed
      * at the time of invocation.
+     * In certain scenarios - such as during application shutdown - you might also want to wait for
+     * any potentially pending jobs. This can be achieved using the following pattern:
+     * ```
+     * while (semaphore.amountOfCurrentlyExecutingJobs > 0) {
+     *   await semaphore.waitForAllExecutingJobsToComplete();
+     * }
+     * ```
      *
      * @returns A promise that resolves when all currently executing jobs are completed.
      */
@@ -239,8 +227,6 @@ class ZeroBackpressureWeightedSemaphore {
         }
     }
     /**
-     * extractUncaughtErrors
-     *
      * This method returns an array of uncaught errors, captured by the semaphore while executing
      * background jobs added by `startExecution`. The term `extract` implies that the semaphore
      * instance will no longer hold these error references once extracted, unlike `get`. In other
@@ -307,8 +293,6 @@ class ZeroBackpressureWeightedSemaphore {
         return newSlot;
     }
     /**
-     * _handleJobExecution
-     *
      * This method manages the execution of a given job in a controlled manner. It ensures that
      * the job is executed within the constraints of the semaphore and handles updating the
      * internal state once the job has completed.
@@ -318,12 +302,12 @@ class ZeroBackpressureWeightedSemaphore {
      * - Updates the internal state to make the allotted slot available again once the job is finished.
      * - Release the weight-allotment lock if the requested amount is available.
      *
-     * @param job - The job to be executed in the given slot.
-     * @param allottedSlot - The slot number in which the job should be executed.
-     * @param weight - A natural number representing the weight associated with the job.
-     * @param isBackgroundJob - A flag indicating whether the caller expects a return value to proceed
-     *                          with its work. If `true`, no return value is expected, and any error
-     *                          thrown by the job should not be propagated to the event loop.
+     * @param job The job to be executed in the given slot.
+     * @param allottedSlot The slot number in which the job should be executed.
+     * @param weight A natural number representing the weight associated with the job.
+     * @param isBackgroundJob A flag indicating whether the caller expects a return value to proceed
+     *                        with its work. If `true`, no return value is expected, and any error
+     *                        thrown by the job should not be propagated to the event loop.
      * @returns A promise that resolves with the job's return value or rejects with its error.
      *          Rejection occurs only if triggered by `waitForCompletion`.
      */
