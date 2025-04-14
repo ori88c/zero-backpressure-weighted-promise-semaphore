@@ -1,6 +1,7 @@
 "use strict";
 /**
  * Copyright 2024 Ori Cohen https://github.com/ori88c
+ * https://github.com/ori88c/zero-backpressure-weighted-promise-semaphore
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -92,10 +93,12 @@ class ZeroBackpressureWeightedSemaphore {
         // This approach reminds a condition_variable in C++.
         this._pendingWeightAllotment = NO_JOB_IS_PENDING_FOR_WEIGHT;
         if (!isNaturalNumber(totalAllowedWeight)) {
+            // prettier-ignore
             throw new Error(`ZeroBackpressureWeightedPromiseSemaphore expects a natural number of ` +
                 `totalAllowedWeight, received ${totalAllowedWeight}`);
         }
         if (!isNaturalNumber(estimatedMaxNumberOfConcurrentJobs)) {
+            // prettier-ignore
             throw new Error(`ZeroBackpressureWeightedPromiseSemaphore expects a natural number of ` +
                 `estimatedMaxNumberOfConcurrentJobs, received ` +
                 `${estimatedMaxNumberOfConcurrentJobs}`);
@@ -143,8 +146,8 @@ class ZeroBackpressureWeightedSemaphore {
         return this._uncaughtErrors.length;
     }
     /**
-     * This method resolves once the given job has *started* its execution, indicating that the
-     * semaphore has allotted sufficient weight for the job.
+     * Resolves once the given job has *started* its execution, indicating that the semaphore has
+     * allotted sufficient weight for the job.
      * Users can leverage this to prevent backpressure of pending jobs:
      * If the semaphore is too busy to start a given job `X`, there is no reason to create another
      * job `Y` until `X` has started.
@@ -175,9 +178,9 @@ class ZeroBackpressureWeightedSemaphore {
         return;
     }
     /**
-     * This method executes the given job in a controlled manner, once the semaphore has allotted
-     * sufficient weight for the job. It resolves or rejects when the job finishes execution, returning
-     * the job's value or propagating any error it may throw.
+     * Executes the given job in a controlled manner, once the semaphore has allotted sufficient
+     * weight for the job. It resolves or rejects when the job finishes execution, returning the
+     * job's value or propagating any error it may throw.
      *
      * This method is useful when the flow depends on a job's execution to proceed, such as needing
      * its return value or handling any errors it may throw.
@@ -198,7 +201,7 @@ class ZeroBackpressureWeightedSemaphore {
         this._validateWeight(weight, 'waitForCompletion');
         await this._allotWeight(weight);
         const availableSlot = this._getAvailableSlot();
-        return this._slots[availableSlot] = this._handleJobExecution(job, availableSlot, weight, false);
+        return (this._slots[availableSlot] = this._handleJobExecution(job, availableSlot, weight, false));
     }
     /**
      * This method allows the caller to wait until all *currently* executing jobs have finished,
@@ -221,23 +224,23 @@ class ZeroBackpressureWeightedSemaphore {
      * @returns A promise that resolves when all currently executing jobs are completed.
      */
     async waitForAllExecutingJobsToComplete() {
-        const pendingJobs = this._slots.filter(job => job !== undefined);
-        if (pendingJobs.length > 0) {
-            await Promise.allSettled(pendingJobs);
+        const busySlots = this._slots.filter((job) => job !== undefined);
+        if (busySlots.length > 0) {
+            await Promise.allSettled(busySlots);
         }
     }
     /**
-     * This method returns an array of uncaught errors, captured by the semaphore while executing
-     * background jobs added by `startExecution`. The term `extract` implies that the semaphore
-     * instance will no longer hold these error references once extracted, unlike `get`. In other
-     * words, ownership of these uncaught errors shifts to the caller, while the semaphore clears
-     * its list of uncaught errors.
+     * Returns an array of uncaught errors, captured by the semaphore while executing background
+     * jobs added by `startExecution`. The term `extract` implies that the semaphore instance will
+     * no longer hold these error references once extracted, unlike `get`.
+     * In other words, ownership of these uncaught errors shifts to the caller, while the semaphore
+     * clears its list of uncaught errors.
      *
      * Even if the user does not intend to perform error-handling with these uncaught errors, it is
      * important to periodically call this method when using `startExecution` to prevent the
      * accumulation of errors in memory.
-     * However, there are a few exceptional cases where the user can safely avoid extracting
-     * uncaught errors:
+     * However, there are a few exceptional cases where the user can safely avoid extracting uncaught
+     * errors:
      * - The number of jobs is relatively small and the process is short-lived.
      * - The jobs never throw errors, thus no uncaught errors are possible.
      *
@@ -250,10 +253,12 @@ class ZeroBackpressureWeightedSemaphore {
     }
     _validateWeight(weight, callingMethodName) {
         if (weight > this._totalAllowedWeight) {
+            // prettier-ignore
             throw new Error(`ZeroBackpressureWeightedPromiseSemaphore.${callingMethodName} received a weight of ` +
                 `${weight} which exceeds the total allowed weight of ${this._totalAllowedWeight}`);
         }
         if (!isNaturalNumber(weight)) {
+            // prettier-ignore
             throw new Error(`ZeroBackpressureWeightedPromiseSemaphore.${callingMethodName} received a non-natural ` +
                 `weight of ${weight}. Weights must be natural numbers: 1, 2, 3, ...`);
         }
@@ -274,7 +279,7 @@ class ZeroBackpressureWeightedSemaphore {
         // Acquire the allotment-lock:
         // No allotments will occur until this weight-request is served.
         this._pendingWeightAllotment = weight;
-        this._waitForSufficientWeight = new Promise(res => this._notifyPendingAllotment = res);
+        this._waitForSufficientWeight = new Promise((res) => (this._notifyPendingAllotment = res));
         await this._waitForSufficientWeight;
         this._availableWeight -= weight;
         // Release the allotment-lock.
@@ -293,8 +298,8 @@ class ZeroBackpressureWeightedSemaphore {
         return newSlot;
     }
     /**
-     * This method manages the execution of a given job in a controlled manner. It ensures that
-     * the job is executed within the constraints of the semaphore and handles updating the
+     * Manages the execution of a given job in a controlled manner. It ensures that the
+     * job is executed within the constraints of the semaphore and handles updating the
      * internal state once the job has completed.
      *
      * ### Behavior

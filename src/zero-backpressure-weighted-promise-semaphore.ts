@@ -1,5 +1,6 @@
 /**
  * Copyright 2024 Ori Cohen https://github.com/ori88c
+ * https://github.com/ori88c/zero-backpressure-weighted-promise-semaphore
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,9 +66,9 @@ const NO_JOB_IS_PENDING_FOR_WEIGHT = -1;
  * ### Error Handling for Background Jobs
  * Background jobs triggered by `startExecution` may throw errors. Unlike the `waitForCompletion` case,
  * the caller has no reference to the corresponding job promise which executes in the background.
- * Therefore, errors from background jobs are captured by the semaphore and can be extracted using 
- * the `extractUncaughtErrors` method. The number of accumulated uncaught errors can be obtained via 
- * the `amountOfUncaughtErrors` getter method. This can be useful, for example, if the user wants to 
+ * Therefore, errors from background jobs are captured by the semaphore and can be extracted using
+ * the `extractUncaughtErrors` method. The number of accumulated uncaught errors can be obtained via
+ * the `amountOfUncaughtErrors` getter method. This can be useful, for example, if the user wants to
  * handle uncaught errors only after a certain threshold is reached.
  *
  * ### Complexity
@@ -76,325 +77,339 @@ const NO_JOB_IS_PENDING_FOR_WEIGHT = -1;
  * - All the getter methods have O(1) complexity for both time and space.
  */
 export class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorType = Error> {
-    private readonly _totalAllowedWeight: number;
-    private readonly _availableSlotsStack: Array<number>;
-    private readonly _slots: Array<Promise<T> | undefined>;
+  private readonly _totalAllowedWeight: number;
+  private readonly _availableSlotsStack: Array<number>;
+  private readonly _slots: Array<Promise<T> | undefined>;
 
-    private _availableWeight: number;
-    private _amountOfCurrentlyExecutingJobs: number = 0;
+  private _availableWeight: number;
+  private _amountOfCurrentlyExecutingJobs: number = 0;
 
-    // Stores uncaught errors from background jobs triggered by `startExecution`.
-    private _uncaughtErrors: UncaughtErrorType[] = [];
+  // Stores uncaught errors from background jobs triggered by `startExecution`.
+  private _uncaughtErrors: UncaughtErrorType[] = [];
 
-    // Weight allotment lock properties:
-    // A pending _waitForSufficientWeight promise indicates that a job cannot start
-    // due to insufficient available weight. The corresponding resolve callback is used
-    // to notify a state change to the _allotWeight promise that acquired the lock.
-    // This approach reminds a condition_variable in C++.
-    private _pendingWeightAllotment: number = NO_JOB_IS_PENDING_FOR_WEIGHT;
-    private _waitForSufficientWeight?: Promise<void>;
-    private _notifyPendingAllotment?: PromiseResolveType; // Resolving the above, if in a pending-state.
+  // Weight allotment lock properties:
+  // A pending _waitForSufficientWeight promise indicates that a job cannot start
+  // due to insufficient available weight. The corresponding resolve callback is used
+  // to notify a state change to the _allotWeight promise that acquired the lock.
+  // This approach reminds a condition_variable in C++.
+  private _pendingWeightAllotment: number = NO_JOB_IS_PENDING_FOR_WEIGHT;
+  private _waitForSufficientWeight?: Promise<void>;
+  private _notifyPendingAllotment?: PromiseResolveType; // Resolving the above, if in a pending-state.
 
-    /**
-     * @param totalAllowedWeight The maximum allowed sum of weights (inclusive) for jobs executed concurrently.
-     * @param estimatedMaxNumberOfConcurrentJobs Estimated maximum number of concurrently executing jobs.
-     *                                           A higher estimate reduces the likelihood of additional slot
-     *                                           allocations during runtime. Please observe that the upper bound
-     *                                           is `totalAllowedWeight`, as the minimum weight is 1.
-     */
-    constructor(
-        totalAllowedWeight: number,
-        estimatedMaxNumberOfConcurrentJobs = DEFAULT_NUMBERS_OF_SLOTS
-    ) {
-        if (!isNaturalNumber(totalAllowedWeight)) {
-            throw new Error(
-                `ZeroBackpressureWeightedPromiseSemaphore expects a natural number of ` +
-                `totalAllowedWeight, received ${totalAllowedWeight}`
-            );
-        }
-
-        if (!isNaturalNumber(estimatedMaxNumberOfConcurrentJobs)) {
-            throw new Error(
-                `ZeroBackpressureWeightedPromiseSemaphore expects a natural number of ` +
-                `estimatedMaxNumberOfConcurrentJobs, received ` +
-                `${estimatedMaxNumberOfConcurrentJobs}`
-            );
-        }
-
-        this._totalAllowedWeight = totalAllowedWeight;
-        this._availableWeight = totalAllowedWeight;
-
-        // If `estimatedMaxNumberOfConcurrentJobs` is a good estimation, no additional slots
-        // will be created during runtime.
-        const initialNumberOfSlots = Math.min(estimatedMaxNumberOfConcurrentJobs, totalAllowedWeight);
-        this._availableSlotsStack = new Array<number>(initialNumberOfSlots).fill(0);
-        for (let i = 1; i < initialNumberOfSlots; ++i) {
-            this._availableSlotsStack[i] = i;
-        }
-        
-        this._slots = new Array(initialNumberOfSlots).fill(undefined);
-    }
-    
-    /**
-     * @returns The maximum allowed sum of weights (inclusive) for jobs executed concurrently.
-     */	
-    public get totalAllowedWeight(): number {
-        return this._totalAllowedWeight;
-    }
-    
-    /**
-     * @returns The currently available, non-allotted amount of weight.
-     */	
-    public get availableWeight(): number {
-        return this._availableWeight;
-    }
-    
-    /**
-     * @returns The number of jobs currently being executed by the semaphore.
-     */	
-    public get amountOfCurrentlyExecutingJobs(): number {
-        return this._amountOfCurrentlyExecutingJobs;
+  /**
+   * @param totalAllowedWeight The maximum allowed sum of weights (inclusive) for jobs executed concurrently.
+   * @param estimatedMaxNumberOfConcurrentJobs Estimated maximum number of concurrently executing jobs.
+   *                                           A higher estimate reduces the likelihood of additional slot
+   *                                           allocations during runtime. Please observe that the upper bound
+   *                                           is `totalAllowedWeight`, as the minimum weight is 1.
+   */
+  constructor(
+    totalAllowedWeight: number,
+    estimatedMaxNumberOfConcurrentJobs = DEFAULT_NUMBERS_OF_SLOTS,
+  ) {
+    if (!isNaturalNumber(totalAllowedWeight)) {
+      // prettier-ignore
+      throw new Error(
+        `ZeroBackpressureWeightedPromiseSemaphore expects a natural number of ` +
+        `totalAllowedWeight, received ${totalAllowedWeight}`,
+      );
     }
 
-    /**
-     * Indicates the number of uncaught errors from background jobs triggered by `startExecution`,
-     * that are currently stored by the instance.
-     * These errors have not yet been extracted using `extractUncaughtErrors`.
-     *
-     * Knowing the number of uncaught errors allows users to decide whether to process them immediately
-     * or wait for further accumulation.
-     *
-     * @returns The number of uncaught errors from background jobs.
-     */	
-    public get amountOfUncaughtErrors(): number {
-        return this._uncaughtErrors.length;
+    if (!isNaturalNumber(estimatedMaxNumberOfConcurrentJobs)) {
+      // prettier-ignore
+      throw new Error(
+        `ZeroBackpressureWeightedPromiseSemaphore expects a natural number of ` +
+        `estimatedMaxNumberOfConcurrentJobs, received ` +
+        `${estimatedMaxNumberOfConcurrentJobs}`,
+      );
     }
 
-    /**
-     * This method resolves once the given job has *started* its execution, indicating that the
-     * semaphore has allotted sufficient weight for the job.
-     * Users can leverage this to prevent backpressure of pending jobs:
-     * If the semaphore is too busy to start a given job `X`, there is no reason to create another
-     * job `Y` until `X` has started.
-     *
-     * This method is particularly useful for executing multiple or background jobs, where no return
-     * value is expected. It promotes a just-in-time approach, on which each job is pending execution
-     * only when no other job is, thereby eliminating backpressure and reducing memory footprint.
-     *
-     * ### Graceful Termination
-     * Method `waitForAllExecutingJobsToComplete` complements the typical use-cases of `startExecution`.
-     * It can be used to perform post-processing, after all the currently-executing jobs have completed.
-     *
-     * ### Error Handling
-     * If the job throws an error, it is captured by the semaphore and can be accessed via the
-     * `extractUncaughtError` method. Users are encouraged to specify a custom `UncaughtErrorType`
-     * generic parameter to the class if jobs may throw errors.
-     *
-     * @param backgroundJob The job to be executed once the semaphore is available.
-     * @param weight A natural number representing the weight associated with the job.
-     * @throws Error if the weight is not a natural number (1, 2, 3, ...).
-     * @returns A promise that resolves when the job starts execution.
-     */	
-    public async startExecution(backgroundJob: SemaphoreJob<T>, weight: number): Promise<void> {
-        this._validateWeight(weight, 'startExecution');
+    this._totalAllowedWeight = totalAllowedWeight;
+    this._availableWeight = totalAllowedWeight;
 
-        await this._allotWeight(weight);
-        const availableSlot = this._getAvailableSlot();
-        this._slots[availableSlot] = this._handleJobExecution(backgroundJob, availableSlot, weight, true);
-        return;
+    // If `estimatedMaxNumberOfConcurrentJobs` is a good estimation, no additional slots
+    // will be created during runtime.
+    const initialNumberOfSlots = Math.min(estimatedMaxNumberOfConcurrentJobs, totalAllowedWeight);
+    this._availableSlotsStack = new Array<number>(initialNumberOfSlots).fill(0);
+    for (let i = 1; i < initialNumberOfSlots; ++i) {
+      this._availableSlotsStack[i] = i;
     }
 
-    /**
-     * This method executes the given job in a controlled manner, once the semaphore has allotted
-     * sufficient weight for the job. It resolves or rejects when the job finishes execution, returning
-     * the job's value or propagating any error it may throw.
-     *
-     * This method is useful when the flow depends on a job's execution to proceed, such as needing
-     * its return value or handling any errors it may throw.
-     *
-     * ### Example Use Case
-     * Suppose you have a route handler that needs to perform a specific code block with limited
-     * concurrency (e.g., database access) due to external constraints, such as throttling limits.
-     * This method allows you to execute the job with controlled concurrency. Once the job resolves
-     * or rejects, you can continue the route handler's flow based on the result.
-     *
-     * @param job The job to be executed once the semaphore is available.
-     * @param weight A natural number representing the weight associated with the job.
-     * @throws Error if the weight is not a natural number (1, 2, 3, ...).
-     *         Alternatively, an error thrown by the job itself.
-     * @returns A promise that resolves with the job's return value or rejects with its error.
-     */
-    public async waitForCompletion(job: SemaphoreJob<T>, weight: number): Promise<T> {
-        this._validateWeight(weight, 'waitForCompletion');
+    this._slots = new Array(initialNumberOfSlots).fill(undefined);
+  }
 
-        await this._allotWeight(weight);
-        const availableSlot = this._getAvailableSlot();
-        return this._slots[availableSlot] = this._handleJobExecution(job, availableSlot, weight, false);
+  /**
+   * @returns The maximum allowed sum of weights (inclusive) for jobs executed concurrently.
+   */
+  public get totalAllowedWeight(): number {
+    return this._totalAllowedWeight;
+  }
+
+  /**
+   * @returns The currently available, non-allotted amount of weight.
+   */
+  public get availableWeight(): number {
+    return this._availableWeight;
+  }
+
+  /**
+   * @returns The number of jobs currently being executed by the semaphore.
+   */
+  public get amountOfCurrentlyExecutingJobs(): number {
+    return this._amountOfCurrentlyExecutingJobs;
+  }
+
+  /**
+   * Indicates the number of uncaught errors from background jobs triggered by `startExecution`,
+   * that are currently stored by the instance.
+   * These errors have not yet been extracted using `extractUncaughtErrors`.
+   *
+   * Knowing the number of uncaught errors allows users to decide whether to process them immediately
+   * or wait for further accumulation.
+   *
+   * @returns The number of uncaught errors from background jobs.
+   */
+  public get amountOfUncaughtErrors(): number {
+    return this._uncaughtErrors.length;
+  }
+
+  /**
+   * Resolves once the given job has *started* its execution, indicating that the semaphore has
+   * allotted sufficient weight for the job.
+   * Users can leverage this to prevent backpressure of pending jobs:
+   * If the semaphore is too busy to start a given job `X`, there is no reason to create another
+   * job `Y` until `X` has started.
+   *
+   * This method is particularly useful for executing multiple or background jobs, where no return
+   * value is expected. It promotes a just-in-time approach, on which each job is pending execution
+   * only when no other job is, thereby eliminating backpressure and reducing memory footprint.
+   *
+   * ### Graceful Termination
+   * Method `waitForAllExecutingJobsToComplete` complements the typical use-cases of `startExecution`.
+   * It can be used to perform post-processing, after all the currently-executing jobs have completed.
+   *
+   * ### Error Handling
+   * If the job throws an error, it is captured by the semaphore and can be accessed via the
+   * `extractUncaughtError` method. Users are encouraged to specify a custom `UncaughtErrorType`
+   * generic parameter to the class if jobs may throw errors.
+   *
+   * @param backgroundJob The job to be executed once the semaphore is available.
+   * @param weight A natural number representing the weight associated with the job.
+   * @throws Error if the weight is not a natural number (1, 2, 3, ...).
+   * @returns A promise that resolves when the job starts execution.
+   */
+  public async startExecution(backgroundJob: SemaphoreJob<T>, weight: number): Promise<void> {
+    this._validateWeight(weight, 'startExecution');
+
+    await this._allotWeight(weight);
+    const availableSlot = this._getAvailableSlot();
+    this._slots[availableSlot] = this._handleJobExecution(
+      backgroundJob,
+      availableSlot,
+      weight,
+      true,
+    );
+    return;
+  }
+
+  /**
+   * Executes the given job in a controlled manner, once the semaphore has allotted sufficient
+   * weight for the job. It resolves or rejects when the job finishes execution, returning the
+   * job's value or propagating any error it may throw.
+   *
+   * This method is useful when the flow depends on a job's execution to proceed, such as needing
+   * its return value or handling any errors it may throw.
+   *
+   * ### Example Use Case
+   * Suppose you have a route handler that needs to perform a specific code block with limited
+   * concurrency (e.g., database access) due to external constraints, such as throttling limits.
+   * This method allows you to execute the job with controlled concurrency. Once the job resolves
+   * or rejects, you can continue the route handler's flow based on the result.
+   *
+   * @param job The job to be executed once the semaphore is available.
+   * @param weight A natural number representing the weight associated with the job.
+   * @throws Error if the weight is not a natural number (1, 2, 3, ...).
+   *         Alternatively, an error thrown by the job itself.
+   * @returns A promise that resolves with the job's return value or rejects with its error.
+   */
+  public async waitForCompletion(job: SemaphoreJob<T>, weight: number): Promise<T> {
+    this._validateWeight(weight, 'waitForCompletion');
+
+    await this._allotWeight(weight);
+    const availableSlot = this._getAvailableSlot();
+    return (this._slots[availableSlot] = this._handleJobExecution(
+      job,
+      availableSlot,
+      weight,
+      false,
+    ));
+  }
+
+  /**
+   * This method allows the caller to wait until all *currently* executing jobs have finished,
+   * meaning once all running promises have either resolved or rejected.
+   *
+   * This is particularly useful in scenarios where you need to ensure that all jobs are completed
+   * before proceeding, such as during shutdown processes or between unit tests.
+   *
+   * Note that the returned promise only awaits jobs that were executed at the time this method
+   * was called. Specifically, it awaits all jobs initiated by this instance that had not completed
+   * at the time of invocation.
+   * In certain scenarios - such as during application shutdown - you might also want to wait for
+   * any potentially pending jobs. This can be achieved using the following pattern:
+   * ```
+   * while (semaphore.amountOfCurrentlyExecutingJobs > 0) {
+   *   await semaphore.waitForAllExecutingJobsToComplete();
+   * }
+   * ```
+   *
+   * @returns A promise that resolves when all currently executing jobs are completed.
+   */
+  public async waitForAllExecutingJobsToComplete(): Promise<void> {
+    const busySlots = this._slots.filter((job) => job !== undefined);
+    if (busySlots.length > 0) {
+      await Promise.allSettled(busySlots);
+    }
+  }
+
+  /**
+   * Returns an array of uncaught errors, captured by the semaphore while executing background
+   * jobs added by `startExecution`. The term `extract` implies that the semaphore instance will
+   * no longer hold these error references once extracted, unlike `get`.
+   * In other words, ownership of these uncaught errors shifts to the caller, while the semaphore
+   * clears its list of uncaught errors.
+   *
+   * Even if the user does not intend to perform error-handling with these uncaught errors, it is
+   * important to periodically call this method when using `startExecution` to prevent the
+   * accumulation of errors in memory.
+   * However, there are a few exceptional cases where the user can safely avoid extracting uncaught
+   * errors:
+   * - The number of jobs is relatively small and the process is short-lived.
+   * - The jobs never throw errors, thus no uncaught errors are possible.
+   *
+   * @returns An array of uncaught errors from background jobs triggered by `startExecution`.
+   */
+  public extractUncaughtErrors(): UncaughtErrorType[] {
+    const errors = this._uncaughtErrors;
+    this._uncaughtErrors = [];
+    return errors;
+  }
+
+  private _validateWeight(weight: number, callingMethodName: string): void {
+    if (weight > this._totalAllowedWeight) {
+      // prettier-ignore
+      throw new Error(
+        `ZeroBackpressureWeightedPromiseSemaphore.${callingMethodName} received a weight of ` +
+        `${weight} which exceeds the total allowed weight of ${this._totalAllowedWeight}`,
+      );
     }
 
-    /**
-     * This method allows the caller to wait until all *currently* executing jobs have finished,
-     * meaning once all running promises have either resolved or rejected.
-     *
-     * This is particularly useful in scenarios where you need to ensure that all jobs are completed
-     * before proceeding, such as during shutdown processes or between unit tests.
-     *
-     * Note that the returned promise only awaits jobs that were executed at the time this method
-     * was called. Specifically, it awaits all jobs initiated by this instance that had not completed
-     * at the time of invocation.  
-     * In certain scenarios - such as during application shutdown - you might also want to wait for
-     * any potentially pending jobs. This can be achieved using the following pattern:
-     * ```
-     * while (semaphore.amountOfCurrentlyExecutingJobs > 0) {
-     *   await semaphore.waitForAllExecutingJobsToComplete();
-     * }
-     * ```
-     *
-     * @returns A promise that resolves when all currently executing jobs are completed.
-     */
-    public async waitForAllExecutingJobsToComplete(): Promise<void> {
-        const pendingJobs = this._slots.filter(job => job !== undefined);
-        if (pendingJobs.length > 0) {
-            await Promise.allSettled(pendingJobs);
-        }
+    if (!isNaturalNumber(weight)) {
+      // prettier-ignore
+      throw new Error(
+        `ZeroBackpressureWeightedPromiseSemaphore.${callingMethodName} received a non-natural ` +
+        `weight of ${weight}. Weights must be natural numbers: 1, 2, 3, ...`,
+      );
+    }
+  }
+
+  private async _allotWeight(weight: number): Promise<void> {
+    while (this._waitForSufficientWeight) {
+      // A previous allotment-request is being served first (FIFO order).
+      await this._waitForSufficientWeight;
+    }
+    // At this stage, no other allotment-request holds the allotment-lock.
+    // The current allotment-request will be served before any other pending request.
+
+    if (this._availableWeight >= weight) {
+      this._availableWeight -= weight;
+      return;
     }
 
-    /**
-     * This method returns an array of uncaught errors, captured by the semaphore while executing
-     * background jobs added by `startExecution`. The term `extract` implies that the semaphore
-     * instance will no longer hold these error references once extracted, unlike `get`. In other
-     * words, ownership of these uncaught errors shifts to the caller, while the semaphore clears
-     * its list of uncaught errors.
-     *
-     * Even if the user does not intend to perform error-handling with these uncaught errors, it is 
-     * important to periodically call this method when using `startExecution` to prevent the 
-     * accumulation of errors in memory.
-     * However, there are a few exceptional cases where the user can safely avoid extracting
-     * uncaught errors:
-     * - The number of jobs is relatively small and the process is short-lived.
-     * - The jobs never throw errors, thus no uncaught errors are possible.
-     *
-     * @returns An array of uncaught errors from background jobs triggered by `startExecution`.
-     */
-    public extractUncaughtErrors(): UncaughtErrorType[] {
-        const errors = this._uncaughtErrors;
-        this._uncaughtErrors = [];
-        return errors;
+    // Currently available weight is insufficient, we need to wait for an ongoing
+    // job to complete.
+
+    // Acquire the allotment-lock:
+    // No allotments will occur until this weight-request is served.
+    this._pendingWeightAllotment = weight;
+    this._waitForSufficientWeight = new Promise((res) => (this._notifyPendingAllotment = res));
+    await this._waitForSufficientWeight;
+
+    this._availableWeight -= weight;
+
+    // Release the allotment-lock.
+    this._pendingWeightAllotment = NO_JOB_IS_PENDING_FOR_WEIGHT;
+    this._waitForSufficientWeight = undefined;
+    this._notifyPendingAllotment = undefined;
+  }
+
+  private _getAvailableSlot(): number {
+    // 1st priority: The pool of unused slots.
+    if (this._availableSlotsStack.length > 0) {
+      return this._availableSlotsStack.pop();
     }
 
-    private _validateWeight(weight: number, callingMethodName: string): void {
-        if (weight > this._totalAllowedWeight) {
-            throw new Error(
-                `ZeroBackpressureWeightedPromiseSemaphore.${callingMethodName} received a weight of ` +
-                `${weight} which exceeds the total allowed weight of ${this._totalAllowedWeight}`
-            );
-        }
+    // 2nd priority: Create a new slot, if all are currently taken.
+    const newSlot = this._slots.length;
+    this._slots.push(undefined);
+    return newSlot;
+  }
 
-        if (!isNaturalNumber(weight)) {
-            throw new Error(
-                `ZeroBackpressureWeightedPromiseSemaphore.${callingMethodName} received a non-natural ` +
-                `weight of ${weight}. Weights must be natural numbers: 1, 2, 3, ...`
-            );
-        }
+  /**
+   * Manages the execution of a given job in a controlled manner. It ensures that the
+   * job is executed within the constraints of the semaphore and handles updating the
+   * internal state once the job has completed.
+   *
+   * ### Behavior
+   * - Waits for the job to either return a value or throw an error.
+   * - Updates the internal state to make the allotted slot available again once the job is finished.
+   * - Release the weight-allotment lock if the requested amount is available.
+   *
+   * @param job The job to be executed in the given slot.
+   * @param allottedSlot The slot number in which the job should be executed.
+   * @param weight A natural number representing the weight associated with the job.
+   * @param isBackgroundJob A flag indicating whether the caller expects a return value to proceed
+   *                        with its work. If `true`, no return value is expected, and any error
+   *                        thrown by the job should not be propagated to the event loop.
+   * @returns A promise that resolves with the job's return value or rejects with its error.
+   *          Rejection occurs only if triggered by `waitForCompletion`.
+   */
+  public async _handleJobExecution(
+    job: SemaphoreJob<T>,
+    allottedSlot: number,
+    weight: number,
+    isBackgroundJob: boolean,
+  ): Promise<T> {
+    try {
+      ++this._amountOfCurrentlyExecutingJobs;
+      const jobResult = await job();
+      return jobResult;
+    } catch (err) {
+      if (!isBackgroundJob) {
+        // Triggered by `waitForCompletion`:
+        // User is awaiting for either fulfillement or rejection.
+        throw err;
+      }
+
+      // Triggered by `startExecution`:
+      // A background job, the caller does not await for its return value to proceed.
+      this._uncaughtErrors.push(err);
+    } finally {
+      --this._amountOfCurrentlyExecutingJobs;
+      this._slots[allottedSlot] = undefined;
+      this._availableSlotsStack.push(allottedSlot);
+      this._availableWeight += weight;
+
+      // Release the allotment lock if it is currently held, and the available
+      // weight suffices to fulfill the pending allotment.
+      if (this._notifyPendingAllotment && this._availableWeight >= this._pendingWeightAllotment) {
+        this._notifyPendingAllotment();
+      }
     }
-
-    private async _allotWeight(weight: number): Promise<void> {
-        while (this._waitForSufficientWeight) {
-            // A previous allotment-request is being served first (FIFO order).
-            await this._waitForSufficientWeight;
-        }
-        // At this stage, no other allotment-request holds the allotment-lock.
-        // The current allotment-request will be served before any other pending request.
-
-        if (this._availableWeight >= weight) {
-            this._availableWeight -= weight;
-            return;
-        }
-
-        // Currently available weight is insufficient, we need to wait for an ongoing
-        // job to complete.
-
-        // Acquire the allotment-lock:
-        // No allotments will occur until this weight-request is served.
-        this._pendingWeightAllotment = weight;
-        this._waitForSufficientWeight = new Promise(res => this._notifyPendingAllotment = res);
-        await this._waitForSufficientWeight;
-
-        this._availableWeight -= weight;
-
-        // Release the allotment-lock.
-        this._pendingWeightAllotment = NO_JOB_IS_PENDING_FOR_WEIGHT;
-        this._waitForSufficientWeight = undefined;
-        this._notifyPendingAllotment = undefined;
-    }
-
-    private _getAvailableSlot(): number {
-        // 1st priority: The pool of unused slots.
-        if (this._availableSlotsStack.length > 0) {
-            return this._availableSlotsStack.pop();
-        }
-        
-        // 2nd priority: Create a new slot, if all are currently taken.
-        const newSlot = this._slots.length;
-        this._slots.push(undefined);
-        return newSlot;
-    }
-
-    /**
-     * This method manages the execution of a given job in a controlled manner. It ensures that
-     * the job is executed within the constraints of the semaphore and handles updating the 
-     * internal state once the job has completed.
-     *
-     * ### Behavior
-     * - Waits for the job to either return a value or throw an error.
-     * - Updates the internal state to make the allotted slot available again once the job is finished.
-     * - Release the weight-allotment lock if the requested amount is available.
-     *
-     * @param job The job to be executed in the given slot.
-     * @param allottedSlot The slot number in which the job should be executed.
-     * @param weight A natural number representing the weight associated with the job.
-     * @param isBackgroundJob A flag indicating whether the caller expects a return value to proceed
-     *                        with its work. If `true`, no return value is expected, and any error
-     *                        thrown by the job should not be propagated to the event loop.
-     * @returns A promise that resolves with the job's return value or rejects with its error.
-     *          Rejection occurs only if triggered by `waitForCompletion`.
-     */
-    public async _handleJobExecution(
-        job: SemaphoreJob<T>,
-        allottedSlot: number,
-        weight: number,
-        isBackgroundJob: boolean
-    ): Promise<T> {
-        try {
-            ++this._amountOfCurrentlyExecutingJobs;
-            const jobResult = await job();
-            return jobResult;
-        } catch (err) {
-            if (!isBackgroundJob) {
-                // Triggered by `waitForCompletion`:
-                // User is awaiting for either fulfillement or rejection.
-                throw err;
-            }
-            
-            // Triggered by `startExecution`:
-            // A background job, the caller does not await for its return value to proceed.
-            this._uncaughtErrors.push(err);
-        } finally {
-            --this._amountOfCurrentlyExecutingJobs;
-            this._slots[allottedSlot] = undefined;
-            this._availableSlotsStack.push(allottedSlot);
-            this._availableWeight += weight;
-
-            // Release the allotment lock if it is currently held, and the available
-            // weight suffices to fulfill the pending allotment.
-            if (this._notifyPendingAllotment && this._availableWeight >= this._pendingWeightAllotment) {
-                this._notifyPendingAllotment();
-            }
-        }
-    }
+  }
 }
 
 function isNaturalNumber(num: number): boolean {
-    const floored = Math.floor(num);
-    return floored >= 1 && floored === num;
+  const floored = Math.floor(num);
+  return floored >= 1 && floored === num;
 }

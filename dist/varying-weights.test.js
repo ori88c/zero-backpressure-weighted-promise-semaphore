@@ -1,6 +1,7 @@
 "use strict";
 /**
  * Copyright 2024 Ori Cohen https://github.com/ori88c
+ * https://github.com/ori88c/zero-backpressure-weighted-promise-semaphore
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,14 +39,14 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             // The ith job (i is 0-indexed) will have a weight of i+1.
             // We choose a totalAllowedWeight such that all jobs can be executed concurrently.
             const numberOfJobs = 27;
-            const totalAllowedWeight = numberOfJobs * (numberOfJobs + 1) / 2; // Sufficient for all the jobs to execute concurrently.
+            const totalAllowedWeight = (numberOfJobs * (numberOfJobs + 1)) / 2; // Sufficient for all the jobs to execute concurrently.
             const underestimatedMaxConcurrentJobs = 1; // Intentionally set too low, to active the semaphore's dynamic slots allocation mechanism.
             const semaphore = new zero_backpressure_weighted_promise_semaphore_1.ZeroBackpressureWeightedSemaphore(totalAllowedWeight, underestimatedMaxConcurrentJobs);
             let expectedAvailableWeight = totalAllowedWeight;
             let expectedAmountOfCurrentlyExecutingJobs = 0;
             const jobCompletionCallbacks = [];
             for (let ithJob = 0; ithJob < numberOfJobs; ++ithJob) {
-                const jobPromise = new Promise(res => jobCompletionCallbacks[ithJob] = res);
+                const jobPromise = new Promise((res) => (jobCompletionCallbacks[ithJob] = res));
                 const job = () => jobPromise;
                 const weight = ithJob + 1;
                 await semaphore.startExecution(job, weight); // We expect it to start immediately, as the total weight is sufficient.
@@ -68,13 +69,13 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             await semaphore.waitForAllExecutingJobsToComplete();
             expect(semaphore.amountOfUncaughtErrors).toBe(0);
         });
+        // prettier-ignore
         test('when each weighted job consumes more than half of the total allowed weight, ' +
             'each job must wait for the previous one to complete, i.e., they run sequantially', async () => {
             const numberOfJobs = 30;
             const totalAllowedWeight = 180;
             const maxConcurrentJobs = 1;
-            const semaphore = new zero_backpressure_weighted_promise_semaphore_1.ZeroBackpressureWeightedSemaphore(totalAllowedWeight, maxConcurrentJobs // Accurate estimation.
-            );
+            const semaphore = new zero_backpressure_weighted_promise_semaphore_1.ZeroBackpressureWeightedSemaphore(totalAllowedWeight, maxConcurrentJobs);
             const getRandomWeightAboveHalfTotal = () => {
                 return 1 + totalAllowedWeight / 2 + Math.floor(Math.random() * (totalAllowedWeight / 2));
             };
@@ -84,7 +85,7 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             for (let ithJob = 0; ithJob < numberOfJobs; ++ithJob) {
                 expect(semaphore.availableWeight).toBe(expectedAvailableWeight);
                 let completeCurrentJob;
-                const jobPromise = new Promise(res => completeCurrentJob = res);
+                const jobPromise = new Promise((res) => (completeCurrentJob = res));
                 const job = () => jobPromise;
                 const currentJobWeight = getRandomWeightAboveHalfTotal();
                 const startExecutionPromise = semaphore.startExecution(job, currentJobWeight); // Attempts to acquire the weight allotment lock.
@@ -123,6 +124,7 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(0);
             expect(semaphore.availableWeight).toBe(totalAllowedWeight);
         });
+        // prettier-ignore
         test('honors the FIFO order of weight allotments: ' +
             'should not allocate a slot for a new job until the previously awaiting job is allocated a slot, ' +
             'even if sufficient weight is available for the newer job', async () => {
@@ -145,7 +147,7 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             const startExecutionPromises = [];
             let expectedAvailableWeight = totalAllowedWeight;
             const startJobExecution = (ithJob) => {
-                startExecutionPromises.push(semaphore.startExecution(() => new Promise(res => jobCompletionCallbacks[ithJob] = res), jobWeights[ithJob]));
+                startExecutionPromises.push(semaphore.startExecution(() => new Promise((res) => (jobCompletionCallbacks[ithJob] = res)), jobWeights[ithJob]));
             };
             // First job should start immediately.
             startJobExecution(0);
@@ -156,7 +158,7 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             // The second job won't start immediately due to insufficient weight.
             // It will acquire the allotment lock, preventing any other jobs from starting before it.
             // The 3rd and 4th jobs also won't start, *despite* sufficient available weight,
-            // because the 2nd job has not started yet. 
+            // because the 2nd job has not started yet.
             // This demonstrates that the semaphore honors the FIFO order of job insertion, i.e.,
             // available weight alone is not a sufficient condition for slot allotment.
             for (let ithJob = 1; ithJob <= 3; ++ithJob) {
@@ -174,7 +176,8 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             await resolveFast();
             let expectedAmountOfCurrentlyExecutingJobs = 3;
             expect(semaphore.amountOfCurrentlyExecutingJobs).toBe(expectedAmountOfCurrentlyExecutingJobs);
-            expectedAvailableWeight = totalAllowedWeight - jobWeights[1] - jobWeights[2] - jobWeights[3];
+            expectedAvailableWeight =
+                totalAllowedWeight - jobWeights[1] - jobWeights[2] - jobWeights[3];
             expect(semaphore.availableWeight).toBe(expectedAvailableWeight);
             // Complete the 2nd, 3rd and 4th jobs one by one.
             // Validate the available weight and the reported amount of concurrently executing jobs.
@@ -191,6 +194,7 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             expect(semaphore.amountOfUncaughtErrors).toBe(0);
             expect(semaphore.totalAllowedWeight).toBe(totalAllowedWeight);
         });
+        // prettier-ignore
         test('waitForCompletion stress test with randomized weights: ' +
             'validates the state with a large number of jobs having random weights', async () => {
             // Higher totalAllowedWeight / maxPossibleJobWeight ratio means that more jobs will execute concurrently.
@@ -204,7 +208,7 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             const pushJob = (ithJob) => {
                 const randomWeight = sampleRandomNaturalNumber(maxPossibleJobWeight);
                 jobWeights[ithJob] = randomWeight;
-                waitForCompletionPromises[ithJob] = semaphore.waitForCompletion(() => new Promise(res => jobCompletionCallbacks[ithJob] = res), randomWeight);
+                waitForCompletionPromises[ithJob] = semaphore.waitForCompletion(() => new Promise((res) => (jobCompletionCallbacks[ithJob] = res)), randomWeight);
             };
             const executingJobs = [];
             let expectedAvailableWeight = totalAllowedWeight;
@@ -229,9 +233,9 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
                     const randomExecutingJobIndex = Math.floor(Math.random() * executingJobs.length);
                     expect(randomExecutingJobIndex).toBeLessThan(executingJobs.length);
                     const randomOngoingJob = executingJobs[randomExecutingJobIndex];
-                    executingJobs.splice(// Removes an item from the array, in-place.
-                    randomExecutingJobIndex, 1 // Number of items to remove from the array, which is 1.
-                    );
+                    executingJobs.splice(
+                    // Removes an item from the array, in-place.
+                    randomExecutingJobIndex, 1);
                     jobCompletionCallbacks[randomOngoingJob]();
                     await waitForCompletionPromises[randomOngoingJob];
                     // Update the expected state following the completion of the random job.
@@ -260,6 +264,7 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             expect(semaphore.amountOfUncaughtErrors).toBe(0);
             expect(semaphore.totalAllowedWeight).toBe(totalAllowedWeight);
         });
+        // prettier-ignore
         test('startExecution stress test with randomized weights: ' +
             'validates the state with a large number of jobs having random weights', async () => {
             // Higher totalAllowedWeight / maxPossibleJobWeight ratio means that more jobs will execute concurrently.
@@ -273,7 +278,7 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             const startJob = (ithJob) => {
                 const randomWeight = sampleRandomNaturalNumber(maxPossibleJobWeight);
                 jobWeights[ithJob] = randomWeight;
-                startExecutionPromises[ithJob] = semaphore.startExecution(() => new Promise(res => jobCompletionCallbacks[ithJob] = res), randomWeight);
+                startExecutionPromises[ithJob] = semaphore.startExecution(() => new Promise((res) => (jobCompletionCallbacks[ithJob] = res)), randomWeight);
             };
             const executingJobs = [];
             let expectedAvailableWeight = totalAllowedWeight;
@@ -298,9 +303,9 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
                     const randomExecutingJobIndex = Math.floor(Math.random() * executingJobs.length);
                     expect(randomExecutingJobIndex).toBeLessThan(executingJobs.length);
                     const randomOngoingJob = executingJobs[randomExecutingJobIndex];
-                    executingJobs.splice(// Removes an item from the array, in-place.
-                    randomExecutingJobIndex, 1 // Number of items to remove from the array, which is 1.
-                    );
+                    executingJobs.splice(
+                    // Removes an item from the array, in-place.
+                    randomExecutingJobIndex, 1);
                     jobCompletionCallbacks[randomOngoingJob]();
                     await resolveFast();
                     // Update the expected state following the completion of the random job.
@@ -330,6 +335,7 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             expect(semaphore.amountOfUncaughtErrors).toBe(0);
             expect(semaphore.totalAllowedWeight).toBe(totalAllowedWeight);
         });
+        // prettier-ignore
         test('waitForCompletion stress test with intentionally induced backpressure and randomized weights: ' +
             'validates execution in FIFO order', async () => {
             // Note: While this test deliberately induces backpressure, it's not an efficient usage example.
@@ -348,7 +354,7 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             for (let ithJob = 0; ithJob < amountOfJobs; ++ithJob) {
                 const randomWeight = sampleRandomNaturalNumber(maxPossibleJobWeight);
                 jobWeights[ithJob] = randomWeight;
-                waitForCompletionPromises[ithJob] = semaphore.waitForCompletion(() => new Promise(res => jobCompletionCallbacks[ithJob] = res), randomWeight);
+                waitForCompletionPromises[ithJob] = semaphore.waitForCompletion(() => new Promise((res) => (jobCompletionCallbacks[ithJob] = res)), randomWeight);
             }
             // Trigger the event loop.
             await Promise.race([...waitForCompletionPromises, resolveFast()]);
@@ -403,7 +409,7 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             -900,
             0.003,
             -0.00001,
-            -903.88888
+            -903.88888,
         ];
         const numsBiggerThanTotalAllowed = [
             totalAllowedWeight + 0.0001,
@@ -416,7 +422,7 @@ describe('ZeroBackpressureWeightedSemaphore varying weights tests', () => {
             totalAllowedWeight + 584004,
             2 * totalAllowedWeight + 5,
             7 * totalAllowedWeight - 1,
-            57 * totalAllowedWeight + 5
+            57 * totalAllowedWeight + 5,
         ];
         test('constructor should throw when totalAllowedWeight is not a natural number', () => {
             for (const nonNaturalNum of nonNaturalNumbers) {

@@ -1,5 +1,6 @@
 /**
  * Copyright 2024 Ori Cohen https://github.com/ori88c
+ * https://github.com/ori88c/zero-backpressure-weighted-promise-semaphore
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -111,8 +112,8 @@ export declare class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorTy
      */
     get amountOfUncaughtErrors(): number;
     /**
-     * This method resolves once the given job has *started* its execution, indicating that the
-     * semaphore has allotted sufficient weight for the job.
+     * Resolves once the given job has *started* its execution, indicating that the semaphore has
+     * allotted sufficient weight for the job.
      * Users can leverage this to prevent backpressure of pending jobs:
      * If the semaphore is too busy to start a given job `X`, there is no reason to create another
      * job `Y` until `X` has started.
@@ -137,9 +138,9 @@ export declare class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorTy
      */
     startExecution(backgroundJob: SemaphoreJob<T>, weight: number): Promise<void>;
     /**
-     * This method executes the given job in a controlled manner, once the semaphore has allotted
-     * sufficient weight for the job. It resolves or rejects when the job finishes execution, returning
-     * the job's value or propagating any error it may throw.
+     * Executes the given job in a controlled manner, once the semaphore has allotted sufficient
+     * weight for the job. It resolves or rejects when the job finishes execution, returning the
+     * job's value or propagating any error it may throw.
      *
      * This method is useful when the flow depends on a job's execution to proceed, such as needing
      * its return value or handling any errors it may throw.
@@ -179,17 +180,17 @@ export declare class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorTy
      */
     waitForAllExecutingJobsToComplete(): Promise<void>;
     /**
-     * This method returns an array of uncaught errors, captured by the semaphore while executing
-     * background jobs added by `startExecution`. The term `extract` implies that the semaphore
-     * instance will no longer hold these error references once extracted, unlike `get`. In other
-     * words, ownership of these uncaught errors shifts to the caller, while the semaphore clears
-     * its list of uncaught errors.
+     * Returns an array of uncaught errors, captured by the semaphore while executing background
+     * jobs added by `startExecution`. The term `extract` implies that the semaphore instance will
+     * no longer hold these error references once extracted, unlike `get`.
+     * In other words, ownership of these uncaught errors shifts to the caller, while the semaphore
+     * clears its list of uncaught errors.
      *
      * Even if the user does not intend to perform error-handling with these uncaught errors, it is
      * important to periodically call this method when using `startExecution` to prevent the
      * accumulation of errors in memory.
-     * However, there are a few exceptional cases where the user can safely avoid extracting
-     * uncaught errors:
+     * However, there are a few exceptional cases where the user can safely avoid extracting uncaught
+     * errors:
      * - The number of jobs is relatively small and the process is short-lived.
      * - The jobs never throw errors, thus no uncaught errors are possible.
      *
@@ -200,8 +201,8 @@ export declare class ZeroBackpressureWeightedSemaphore<T = void, UncaughtErrorTy
     private _allotWeight;
     private _getAvailableSlot;
     /**
-     * This method manages the execution of a given job in a controlled manner. It ensures that
-     * the job is executed within the constraints of the semaphore and handles updating the
+     * Manages the execution of a given job in a controlled manner. It ensures that the
+     * job is executed within the constraints of the semaphore and handles updating the
      * internal state once the job has completed.
      *
      * ### Behavior
